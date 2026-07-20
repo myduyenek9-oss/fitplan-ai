@@ -5,6 +5,9 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
 from app.db.base import Base
+from app.models.goal import Goal  # noqa: F401 - register model metadata for migrations
+from app.models.profile import Profile  # noqa: F401 - register model metadata for migrations
+from app.models.record import BodyMetric, ExerciseLog, FoodLog  # noqa: F401 - register model metadata for migrations
 from app.models.user import User  # noqa: F401 - register model metadata for migrations
 
 config = context.config

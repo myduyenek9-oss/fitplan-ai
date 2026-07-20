@@ -2,54 +2,37 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerificationError, VerifyMismatchError
+
 from app.core.config import get_settings
 
-_HASH_ALGORITHM = "pbkdf2_sha256"
-_HASH_ITERATIONS = 210_000
 _TOKEN_ALGORITHM = "HS256"
 _DEFAULT_TOKEN_EXPIRES_MINUTES = 60 * 24
+_MIN_JWT_SECRET_LENGTH = 32
+_PLACEHOLDER_JWT_SECRETS = {
+    "replace-with-a-long-random-secret",
+    "unsafe-development-secret-change-me",
+}
+_password_hasher = PasswordHasher(time_cost=2, memory_cost=19_456, parallelism=1)
+
+
+class AuthConfigurationError(RuntimeError):
+    pass
 
 
 def hash_password(password: str) -> str:
-    salt = os.urandom(16)
-    digest = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt,
-        _HASH_ITERATIONS,
-    )
-    return "$".join(
-        [
-            _HASH_ALGORITHM,
-            str(_HASH_ITERATIONS),
-            _base64url_encode(salt),
-            _base64url_encode(digest),
-        ]
-    )
+    return _password_hasher.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     try:
-        algorithm, iterations_text, salt_text, digest_text = password_hash.split("$", 3)
-        if algorithm != _HASH_ALGORITHM:
-            return False
-        iterations = int(iterations_text)
-        salt = _base64url_decode(salt_text)
-        expected_digest = _base64url_decode(digest_text)
-    except (TypeError, ValueError):
+        return _password_hasher.verify(password_hash, password)
+    except (VerificationError, VerifyMismatchError):
         return False
-
-    actual_digest = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt,
-        iterations,
-    )
-    return hmac.compare_digest(actual_digest, expected_digest)
 
 
 def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
@@ -60,15 +43,30 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
     }
-    return _encode_jwt(payload, get_settings().jwt_secret)
+    return _encode_jwt(payload, _get_jwt_secret())
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
-    payload = _decode_jwt(token, get_settings().jwt_secret)
+    payload = _decode_jwt(token, _get_jwt_secret())
     expires_at = payload.get("exp")
     if not isinstance(expires_at, int) or expires_at < int(datetime.now(UTC).timestamp()):
         raise ValueError("Token has expired")
     return payload
+
+
+def _get_jwt_secret() -> str:
+    configured_secret = get_settings().jwt_secret
+    secret = configured_secret.get_secret_value().strip() if configured_secret is not None else ""
+    if (
+        not secret
+        or len(secret) < _MIN_JWT_SECRET_LENGTH
+        or secret.lower() in _PLACEHOLDER_JWT_SECRETS
+    ):
+        raise AuthConfigurationError(
+            "JWT_SECRET must be set to a non-placeholder value with at least "
+            f"{_MIN_JWT_SECRET_LENGTH} characters"
+        )
+    return secret
 
 
 def _encode_jwt(payload: dict[str, Any], secret: str) -> str:

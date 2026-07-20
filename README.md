@@ -76,6 +76,11 @@ Run the API locally:
 
 The health endpoint is available at `GET /health` and returns `{ "status": "ok" }`.
 
+Authentication uses a single initialized user account. Before using `/api/auth/login`, set a strong
+`JWT_SECRET`; generate one with `openssl rand -hex 32` and keep it out of source control. The example
+value in `infra/.env.example` is a placeholder and is rejected by authentication operations. The default
+`DATABASE_URL` targets PostgreSQL; tests override it with in-memory SQLite.
+
 ## Frontend setup
 
 With pnpm (preferred):

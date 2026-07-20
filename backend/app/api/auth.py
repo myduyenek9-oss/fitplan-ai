@@ -20,7 +20,7 @@ def setup_single_user(payload: AuthSetupRequest, db: Session = Depends(get_db)) 
             detail="A user has already been initialized",
         )
 
-    user = User(username=payload.username, password_hash=hash_password(payload.password))
+    user = User(id=1, username=payload.username, password_hash=hash_password(payload.password))
     db.add(user)
     try:
         db.commit()

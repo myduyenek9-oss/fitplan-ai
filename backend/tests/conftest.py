@@ -7,8 +7,12 @@ from sqlalchemy.pool import StaticPool
 
 @pytest.fixture
 def auth_client(monkeypatch):
-    monkeypatch.setenv("JWT_SECRET", "test-only-secret")
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("JWT_SECRET", "test-only-secret-with-at-least-32-characters")
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    get_settings.cache_clear()
 
     from app.api.deps import get_db
     from app.db.base import Base
@@ -36,3 +40,4 @@ def auth_client(monkeypatch):
     finally:
         app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=engine)
+        get_settings.cache_clear()

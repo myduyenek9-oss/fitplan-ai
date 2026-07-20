@@ -19,7 +19,7 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.create_table(
         "users",
-        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("id", sa.Integer(), autoincrement=False, nullable=False),
         sa.Column("username", sa.String(length=128), nullable=False),
         sa.Column("password_hash", sa.String(length=512), nullable=False),
         sa.Column(
@@ -28,6 +28,7 @@ def upgrade() -> None:
             server_default=sa.text("CURRENT_TIMESTAMP"),
             nullable=False,
         ),
+        sa.CheckConstraint("id = 1", name="ck_users_singleton_id"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_users_username", "users", ["username"], unique=True)

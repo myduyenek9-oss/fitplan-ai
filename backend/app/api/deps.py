@@ -5,14 +5,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_engine
 from app.models.user import User
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
+    db = SessionLocal(bind=get_engine())
     try:
         yield db
     finally:
@@ -30,7 +30,7 @@ def get_current_user(
         payload = decode_access_token(credentials.credentials)
         subject = payload.get("sub")
         user_id = int(subject) if isinstance(subject, str) else None
-    except (TypeError, ValueError):
+    except ValueError:
         raise _unauthorized() from None
 
     if user_id is None:

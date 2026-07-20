@@ -1,11 +1,12 @@
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://fitplan:fitplan@localhost:5432/fitplan_ai"
-    jwt_secret: str = "unsafe-development-secret-change-me"
+    jwt_secret: SecretStr | None = None
     ai_base_url: str = ""
     ai_api_key: str = ""
     ai_model: str = ""

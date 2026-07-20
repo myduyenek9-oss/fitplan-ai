@@ -47,3 +47,14 @@ the follow-up specification review. It intentionally records only observed facts
 - Green: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1`
   - Result: backend pytest reported `5 passed`, Ruff reported `All checks passed!`, frontend Vitest
     reported `1 test passed`, and the Vite production build completed.
+
+
+## Follow-up code review red/green observations
+
+- Red: `python -m pytest backend/tests/test_project_config.py -q`
+  - Result: `3 failed` before fixing the script/package-manager/Node-version review items.
+- Green: `python -m pytest backend/tests/test_project_config.py -q`
+  - Result: `8 passed` after updating `scripts/verify.ps1`, `scripts/dev.ps1`, `frontend/package.json`, and `README.md`.
+- Green: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1`
+  - Result: backend pytest reported `8 passed`, Ruff reported `All checks passed!`, frontend Vitest
+    reported `1 test passed`, and the Vite production build completed.

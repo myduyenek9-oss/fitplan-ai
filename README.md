@@ -25,11 +25,18 @@ Test and developer dependencies are installable with the `test` or `dev` extras:
 ### Frontend
 
 The frontend is a Vite React TypeScript app with Vitest and React Testing Library.
-`frontend/package.json` uses standard npm scripts: `dev`, `test`, `build`, and `preview`.
+`frontend/package.json` uses standard scripts: `dev`, `test`, `build`, and `preview`. The package
+manager is explicitly pinned as `pnpm@11.9.0`, and the committed `frontend/pnpm-lock.yaml` is the
+authoritative lock file. Do not generate or commit an npm `package-lock.json`; npm is only a fallback
+when pnpm is unavailable.
 
-This workspace currently includes a `frontend/pnpm-lock.yaml` because `npm` was not available in
-the execution environment used for task 1. Use `npm install` when npm is installed. If npm is not
-available, use the pnpm fallback:
+Vite 7 requires Node.js `^20.19.0 || >=22.12.0`, declared in `frontend/package.json`. The helper
+scripts check the active Node version and, when available, prepend the Codex bundled Node runtime
+(`%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin`)
+before failing with a clear error.
+
+This workspace includes `frontend/pnpm-lock.yaml` because npm was not available in the execution
+environment used for task 1. The normal install path is pnpm:
 
 ```powershell
 cd frontend
@@ -38,7 +45,17 @@ pnpm run test -- --run
 pnpm run build
 ```
 
-The helper scripts prefer `npm` when it is available and fall back to `pnpm` otherwise.
+If pnpm is unavailable, the same scripts can run with npm as a fallback:
+
+```powershell
+cd frontend
+npm install
+npm run test -- --run
+npm run build
+```
+
+Do not commit an npm `package-lock.json`; the committed pnpm lock remains authoritative. The helper
+scripts prefer pnpm and fall back to npm only when pnpm is unavailable.
 
 ## Backend setup
 
@@ -61,17 +78,7 @@ The health endpoint is available at `GET /health` and returns `{ "status": "ok" 
 
 ## Frontend setup
 
-With npm:
-
-```powershell
-cd frontend
-npm install
-npm run test -- --run
-npm run build
-npm run dev
-```
-
-With pnpm fallback:
+With pnpm (preferred):
 
 ```powershell
 cd frontend
@@ -91,7 +98,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 ```
 
 `dev.ps1` and `verify.ps1` prefer `.venv\Scripts\python.exe` from the repository root. If that
-file does not exist, they fall back to the system `python` command. They also prefer npm and fall
-back to pnpm when npm is unavailable.
+file does not exist, they fall back to the system `python` command. They also prefer pnpm and fall
+back to npm when pnpm is unavailable. Before frontend commands, they validate the Vite-compatible
+Node.js version and try the bundled Codex Node runtime when available.
 
 Copy `infra/.env.example` to `.env` for local environment configuration when needed.

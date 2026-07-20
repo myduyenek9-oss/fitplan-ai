@@ -1,30 +1,71 @@
-$root = Split-Path -Parent $PSScriptRoot
+$ErrorActionPreference = "Stop"
+$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $venvPython = Join-Path $root ".venv\Scripts\python.exe"
-$python = if (Test-Path $venvPython) { $venvPython } else { "python" }
+$python = if (Test-Path -LiteralPath $venvPython) { $venvPython } else { "python" }
 
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    $codexNodeBin = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin"
-    if (Test-Path (Join-Path $codexNodeBin "node.exe")) {
-        $env:Path = "$codexNodeBin;$env:Path"
+function Get-NodeVersion {
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) {
+        return $null
+    }
+
+    $versionText = (& $node.Source --version).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        return $null
+    }
+
+    try {
+        return [version]($versionText.TrimStart("v"))
+    }
+    catch {
+        return $null
     }
 }
 
-$packageManager = if (Get-Command npm -ErrorAction SilentlyContinue) {
-    "npm"
-} elseif (Get-Command pnpm -ErrorAction SilentlyContinue) {
-    "pnpm"
-} else {
-    throw "npm or pnpm is required"
+function Test-ViteNodeVersion {
+    param([version]$Version)
+
+    return $null -ne $Version -and (
+        ($Version.Major -eq 20 -and $Version -ge [version]"20.19.0") -or
+        ($Version.Major -ge 22 -and $Version -ge [version]"22.12.0")
+    )
 }
 
-Start-Process powershell -ArgumentList @(
+function Assert-NodeVersion {
+    $version = Get-NodeVersion
+    if (-not (Test-ViteNodeVersion $version)) {
+        $codexNodeBin = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin"
+        $codexNode = Join-Path $codexNodeBin "node.exe"
+        if (Test-Path -LiteralPath $codexNode) {
+            $env:Path = "$codexNodeBin$([IO.Path]::PathSeparator)$env:Path"
+            $version = Get-NodeVersion
+        }
+    }
+
+    if (-not (Test-ViteNodeVersion $version)) {
+        throw "Vite 7 requires Node.js ^20.19.0 or >=22.12.0; found '$version'."
+    }
+}
+
+Assert-NodeVersion
+$packageManager = if (Get-Command pnpm -ErrorAction SilentlyContinue) {
+    "pnpm"
+} elseif (Get-Command npm -ErrorAction SilentlyContinue) {
+    "npm"
+} else {
+    throw "pnpm is the primary package manager; npm is the fallback. Neither command is available."
+}
+
+Start-Process -FilePath "powershell.exe" -WorkingDirectory $root -ArgumentList @(
+    "-NoProfile",
     "-NoExit",
     "-Command",
-    "Set-Location -LiteralPath '$root'; & '$python' -m uvicorn app.main:app --app-dir backend --reload"
+    "& '$python' -m uvicorn app.main:app --app-dir backend --reload"
 )
 
-Start-Process powershell -ArgumentList @(
+Start-Process -FilePath "powershell.exe" -WorkingDirectory (Join-Path $root "frontend") -ArgumentList @(
+    "-NoProfile",
     "-NoExit",
     "-Command",
-    "Set-Location -LiteralPath '$root\frontend'; $packageManager run dev"
+    "$packageManager run dev"
 )

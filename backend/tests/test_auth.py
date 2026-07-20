@@ -99,6 +99,50 @@ def test_me_rejects_tampered_malformed_expired_and_unknown_subject_tokens(auth_c
         assert response.status_code == 401
 
 
+def test_me_rejects_non_strict_base64url_jwt_segments(auth_client):
+    auth_client.post(
+        "/api/auth/setup",
+        json={"username": "owner", "password": "correct horse battery staple"},
+    )
+    valid_token = auth_client.post(
+        "/api/auth/login",
+        json={"username": "owner", "password": "correct horse battery staple"},
+    ).json()["access_token"]
+    header, payload, signature = valid_token.split(".")
+    malformed_tokens = [
+        f"{valid_token}!!!!",
+        f"{header}.{payload}.{signature}!!!!",
+        f"{header}.{payload}.{signature}=",
+        f"{header}.{payload}.A",
+        f"{header}.{payload}.",
+        f"{header}.{payload}.{signature}.extra",
+        f"{header}.{payload}",
+    ]
+
+    for token in malformed_tokens:
+        response = auth_client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 401
+
+
+def test_decode_access_token_rejects_non_strict_base64url_segments(auth_client):
+    from app.core.security import create_access_token, decode_access_token
+
+    valid_token = create_access_token("1")
+    header, payload, signature = valid_token.split(".")
+
+    for token in [
+        f"{valid_token}!!!!",
+        f"{header}.{payload}.{signature}!!!!",
+        f"{header}.{payload}.{signature}=",
+        f"{header}.{payload}.A",
+        f"{header}.{payload}.",
+        f"{header}.{payload}.{signature}.extra",
+        f"{header}.{payload}",
+    ]:
+        with pytest.raises(ValueError):
+            decode_access_token(token)
+
+
 def test_jwt_secret_must_be_configured_for_auth_operations(monkeypatch):
     from app.core.config import get_settings
     from app.core.security import create_access_token

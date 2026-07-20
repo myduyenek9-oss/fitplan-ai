@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -11,6 +12,7 @@ from argon2.exceptions import VerificationError, VerifyMismatchError
 from app.core.config import get_settings
 
 _TOKEN_ALGORITHM = "HS256"
+_BASE64URL_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 _DEFAULT_TOKEN_EXPIRES_MINUTES = 60 * 24
 _MIN_JWT_SECRET_LENGTH = 32
 _PLACEHOLDER_JWT_SECRETS = {
@@ -86,10 +88,10 @@ def _encode_jwt(payload: dict[str, Any], secret: str) -> str:
 
 
 def _decode_jwt(token: str, secret: str) -> dict[str, Any]:
-    try:
-        header_text, payload_text, signature_text = token.split(".", 2)
-    except ValueError as exc:
-        raise ValueError("Invalid token format") from exc
+    segments = token.split(".")
+    if len(segments) != 3:
+        raise ValueError("Invalid token format")
+    header_text, payload_text, signature_text = segments
 
     signing_input = f"{header_text}.{payload_text}"
     expected_signature = hmac.new(
@@ -122,5 +124,16 @@ def _base64url_encode(value: bytes) -> str:
 
 
 def _base64url_decode(value: str) -> bytes:
+    if (
+        not value
+        or "=" in value
+        or len(value) % 4 == 1
+        or _BASE64URL_SEGMENT_PATTERN.fullmatch(value) is None
+    ):
+        raise ValueError("Invalid base64url segment")
+
     padding = "=" * (-len(value) % 4)
-    return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
+    decoded = base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
+    if _base64url_encode(decoded) != value:
+        raise ValueError("Invalid base64url segment")
+    return decoded

@@ -12,7 +12,7 @@ ACTIVITY_MULTIPLIERS: dict[str, float] = {
     "very_active": 1.9,
 }
 
-MIN_AGE = 13
+MIN_AGE = 18
 MAX_AGE = 100
 MIN_HEIGHT_CM = 100.0
 MAX_HEIGHT_CM = 230.0

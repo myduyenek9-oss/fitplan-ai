@@ -10,7 +10,7 @@ Sex = Literal["male", "female"]
 
 
 class CaloriePreviewRequest(BaseModel):
-    age: int = Field(ge=13, le=100)
+    age: int = Field(ge=18, le=100)
     sex: Sex
     weight_kg: float = Field(ge=30, le=250)
     height_cm: float = Field(ge=100, le=230)

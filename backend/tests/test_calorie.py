@@ -109,6 +109,7 @@ def test_fat_loss_rejects_when_tdee_is_below_safety_floor() -> None:
 @pytest.mark.parametrize(
     "kwargs",
     [
+        {"age": 17, "sex": "male", "weight_kg": 80.0, "height_cm": 180.0},
         {"age": 120, "sex": "male", "weight_kg": 80.0, "height_cm": 180.0},
         {"age": 30, "sex": "male", "weight_kg": 1.0, "height_cm": 180.0},
         {"age": 30, "sex": "male", "weight_kg": 80.0, "height_cm": 1.0},
@@ -117,6 +118,21 @@ def test_fat_loss_rejects_when_tdee_is_below_safety_floor() -> None:
 def test_calculate_bmr_rejects_unrealistic_adult_inputs(kwargs: dict[str, object]) -> None:
     with pytest.raises(ValueError, match="age|weight_kg|height_cm"):
         calculate_bmr(**kwargs)
+
+
+def test_calculate_targets_accepts_minimum_adult_age() -> None:
+    targets = calculate_targets(
+        age=18,
+        sex="male",
+        weight_kg=80.0,
+        height_cm=180.0,
+        activity_level="moderate",
+        goal="maintenance",
+    )
+
+    assert targets.bmr == 1840
+    assert targets.tdee == 2852
+    assert targets.daily_calories == 2852
 
 
 def test_muscle_gain_target_is_above_tdee_and_uses_higher_protein() -> None:
@@ -192,6 +208,7 @@ def test_preview_endpoint_returns_calorie_targets_without_auth() -> None:
     ("field", "value"),
     [
         ("age", 0),
+        ("age", 17),
         ("age", 120),
         ("sex", "unknown"),
         ("weight_kg", 0),
@@ -218,6 +235,7 @@ def test_preview_endpoint_validates_request_fields(field: str, value: object) ->
 
     assert response.status_code == 422
 
+
 def test_preview_endpoint_rejects_fat_loss_when_tdee_is_below_safety_floor() -> None:
     client = TestClient(app)
 
@@ -235,6 +253,25 @@ def test_preview_endpoint_rejects_fat_loss_when_tdee_is_below_safety_floor() -> 
 
     assert response.status_code == 422
     assert "当前维持热量低于安全减脂下限" in response.json()["detail"]
+
+
+def test_preview_endpoint_accepts_minimum_adult_age() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/calorie/preview",
+        json={
+            "age": 18,
+            "sex": "male",
+            "weight_kg": 80.0,
+            "height_cm": 180.0,
+            "activity_level": "moderate",
+            "goal": "maintenance",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["daily_calories"] == 2852
 
 
 def test_preview_endpoint_normalizes_choice_fields() -> None:

@@ -1,4 +1,8 @@
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 PASSWORD = "correct horse battery staple"
@@ -116,6 +120,7 @@ def test_authenticated_user_can_save_and_update_active_goal(auth_client):
     "payload",
     [
         {"weight_kg": -70, "logged_at": "2026-07-20T08:00:00Z"},
+        {"weight_kg": 0, "logged_at": "2026-07-20T08:00:00Z"},
         {"weight_kg": 70, "body_fat_percent": 101, "logged_at": "2026-07-20T08:00:00Z"},
         {"weight_kg": 70, "waist_cm": -1, "logged_at": "2026-07-20T08:00:00Z"},
     ],
@@ -158,3 +163,177 @@ def test_authenticated_user_can_save_and_list_body_metrics(auth_client):
     assert [metric["weight_kg"] for metric in metrics] == [69.8, 70.2]
     assert metrics[1]["body_fat_percent"] == 22.5
     assert metrics[1]["waist_cm"] == 78.0
+
+
+def test_profile_rejects_invalid_timezone(auth_client):
+    headers = _auth_headers(auth_client)
+
+    response = auth_client.put(
+        "/api/profile",
+        headers=headers,
+        json={
+            "display_name": "Owner",
+            "sex": "female",
+            "birth_date": "1990-05-01",
+            "height_cm": 168.5,
+            "timezone": "Not/AZone",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "endpoint,payload",
+    [
+        (
+            "/api/profile",
+            {
+                "display_name": "Owner",
+                "sex": "female",
+                "birth_date": "1990-05-01",
+                "height_cm": 0,
+                "timezone": "UTC",
+            },
+        ),
+        (
+            "/api/profile",
+            {
+                "display_name": "Owner",
+                "sex": "female",
+                "birth_date": "2015-05-01",
+                "height_cm": 168,
+                "timezone": "UTC",
+            },
+        ),
+        (
+            "/api/profile/goal",
+            {
+                "goal_type": "fat_loss",
+                "daily_calories": 0,
+                "protein_g": 130,
+                "carb_g": 180,
+                "fat_g": 60,
+                "activity_level": "moderate",
+            },
+        ),
+        (
+            "/api/profile/goal",
+            {
+                "goal_type": "fat_loss",
+                "daily_calories": 1800,
+                "protein_g": 0,
+                "carb_g": 180,
+                "fat_g": 60,
+                "activity_level": "moderate",
+            },
+        ),
+        (
+            "/api/profile/goal",
+            {
+                "goal_type": "fat_loss",
+                "daily_calories": 1800,
+                "protein_g": 130,
+                "carb_g": 180,
+                "fat_g": 60,
+                "activity_level": "moderate",
+                "target_weight_kg": 0,
+            },
+        ),
+    ],
+)
+def test_profile_and_goal_reject_obviously_invalid_ranges(auth_client, endpoint, payload):
+    headers = _auth_headers(auth_client)
+
+    response = auth_client.put(endpoint, headers=headers, json=payload)
+
+    assert response.status_code == 422
+
+
+def test_body_metric_logged_at_requires_timezone_offset(auth_client):
+    headers = _auth_headers(auth_client)
+
+    response = auth_client.post(
+        "/api/body-metrics",
+        headers=headers,
+        json={"weight_kg": 70, "logged_at": "2026-07-20T08:00:00"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_body_metric_response_uses_profile_timezone(auth_client):
+    headers = _auth_headers(auth_client)
+    profile_response = auth_client.put(
+        "/api/profile",
+        headers=headers,
+        json={
+            "display_name": "Owner",
+            "sex": "female",
+            "birth_date": "1990-05-01",
+            "height_cm": 168,
+            "timezone": "Asia/Shanghai",
+        },
+    )
+
+    create_response = auth_client.post(
+        "/api/body-metrics",
+        headers=headers,
+        json={"weight_kg": 70, "logged_at": "2026-07-20T00:30:00+08:00"},
+    )
+    list_response = auth_client.get("/api/body-metrics", headers=headers)
+
+    assert profile_response.status_code == 200
+    assert create_response.status_code == 201
+    assert create_response.json()["logged_at"].endswith("+08:00")
+    assert list_response.status_code == 200
+    assert list_response.json()[0]["logged_at"].endswith("+08:00")
+
+
+def test_database_rejects_second_active_goal_for_same_user():
+    from app.db.base import Base
+    from app.models.goal import Goal
+    from app.models.user import User
+
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+    try:
+        db.add(User(id=1, username="owner", password_hash="hash"))
+        db.commit()
+        db.add(
+            Goal(
+                user_id=1,
+                goal_type="fat_loss",
+                daily_calories=1800,
+                protein_g=130,
+                carb_g=180,
+                fat_g=60,
+                activity_level="moderate",
+                is_active=True,
+            )
+        )
+        db.commit()
+        db.add(
+            Goal(
+                user_id=1,
+                goal_type="maintenance",
+                daily_calories=2200,
+                protein_g=140,
+                carb_g=260,
+                fat_g=70,
+                activity_level="active",
+                is_active=True,
+            )
+        )
+
+        with pytest.raises(IntegrityError):
+            db.commit()
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)

@@ -1,7 +1,9 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.api.time_utils import ensure_timezone_aware
 
 FoodStatus = Literal["active", "deleted", "undone"]
 
@@ -16,6 +18,11 @@ class FoodLogCreate(BaseModel):
     fat_g: float = Field(ge=0)
     logged_at: datetime
 
+    @field_validator("logged_at")
+    @classmethod
+    def validate_logged_at(cls, value: datetime) -> datetime:
+        return ensure_timezone_aware(value)
+
 
 class FoodLogUpdate(BaseModel):
     original_text: str | None = Field(default=None, min_length=1, max_length=2048)
@@ -26,6 +33,13 @@ class FoodLogUpdate(BaseModel):
     carb_g: float | None = Field(default=None, ge=0)
     fat_g: float | None = Field(default=None, ge=0)
     logged_at: datetime | None = None
+
+    @field_validator("logged_at")
+    @classmethod
+    def validate_logged_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        return ensure_timezone_aware(value)
 
 
 class FoodLogResponse(BaseModel):
@@ -49,9 +63,14 @@ class FoodLogResponse(BaseModel):
 class ExerciseLogCreate(BaseModel):
     exercise_type: str = Field(min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=1024)
-    duration_minutes: float = Field(ge=0)
-    calories_burned: float = Field(ge=0)
+    duration_minutes: float = Field(gt=0)
+    calories_burned: float = Field(gt=0)
     logged_at: datetime
+
+    @field_validator("logged_at")
+    @classmethod
+    def validate_logged_at(cls, value: datetime) -> datetime:
+        return ensure_timezone_aware(value)
 
 
 class ExerciseLogResponse(ExerciseLogCreate):

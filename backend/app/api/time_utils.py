@@ -21,9 +21,9 @@ def ensure_timezone_aware(value: datetime) -> datetime:
     return value
 
 
-def to_utc_naive(value: datetime) -> datetime:
+def to_utc_storage(value: datetime) -> datetime:
     ensure_timezone_aware(value)
-    return value.astimezone(UTC).replace(tzinfo=None)
+    return value.astimezone(UTC)
 
 
 def get_user_timezone(db: Session, user_id: int) -> ZoneInfo:
@@ -36,7 +36,7 @@ def get_user_timezone(db: Session, user_id: int) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
-def utc_naive_to_timezone(value: datetime, timezone: ZoneInfo) -> datetime:
+def utc_storage_to_timezone(value: datetime, timezone: ZoneInfo) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         utc_value = value.replace(tzinfo=UTC)
     else:
@@ -44,10 +44,10 @@ def utc_naive_to_timezone(value: datetime, timezone: ZoneInfo) -> datetime:
     return utc_value.astimezone(timezone)
 
 
-def local_date_to_utc_naive_bounds(day: date, timezone: ZoneInfo) -> tuple[datetime, datetime]:
+def local_date_to_utc_storage_bounds(day: date, timezone: ZoneInfo) -> tuple[datetime, datetime]:
     local_start = datetime.combine(day, time.min, tzinfo=timezone)
     local_end = local_start + timedelta(days=1)
     return (
-        local_start.astimezone(UTC).replace(tzinfo=None),
-        local_end.astimezone(UTC).replace(tzinfo=None),
+        local_start.astimezone(UTC),
+        local_end.astimezone(UTC),
     )

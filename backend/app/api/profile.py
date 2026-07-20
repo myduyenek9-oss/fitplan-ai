@@ -1,14 +1,15 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.api.time_utils import get_user_timezone, to_utc_storage, utc_storage_to_timezone
 from app.models.goal import Goal
 from app.models.profile import Profile
 from app.models.record import BodyMetric
 from app.models.user import User
-from app.api.time_utils import get_user_timezone, to_utc_naive, utc_naive_to_timezone
 from app.schemas.profile import (
     BodyMetricCreate,
     BodyMetricResponse,
@@ -21,7 +22,49 @@ from app.schemas.profile import (
 router = APIRouter(tags=["profile"])
 
 
-def _body_metric_response(metric: BodyMetric, user_timezone) -> BodyMetricResponse:
+def _profile_timezone(profile: Profile) -> ZoneInfo:
+    if profile.timezone is None:
+        return ZoneInfo("UTC")
+    try:
+        return ZoneInfo(profile.timezone)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
+
+
+def _profile_response(profile: Profile) -> ProfileResponse:
+    user_timezone = _profile_timezone(profile)
+    return ProfileResponse(
+        id=profile.id,
+        user_id=profile.user_id,
+        display_name=profile.display_name,
+        sex=profile.sex,
+        birth_date=profile.birth_date,
+        height_cm=profile.height_cm,
+        timezone=profile.timezone,
+        created_at=utc_storage_to_timezone(profile.created_at, user_timezone),
+        updated_at=utc_storage_to_timezone(profile.updated_at, user_timezone),
+    )
+
+
+def _goal_response(goal: Goal, user_timezone: ZoneInfo) -> GoalResponse:
+    return GoalResponse(
+        id=goal.id,
+        user_id=goal.user_id,
+        goal_type=goal.goal_type,
+        daily_calories=goal.daily_calories,
+        protein_g=goal.protein_g,
+        carb_g=goal.carb_g,
+        fat_g=goal.fat_g,
+        activity_level=goal.activity_level,
+        target_weight_kg=goal.target_weight_kg,
+        target_date=goal.target_date,
+        is_active=goal.is_active,
+        created_at=utc_storage_to_timezone(goal.created_at, user_timezone),
+        updated_at=utc_storage_to_timezone(goal.updated_at, user_timezone),
+    )
+
+
+def _body_metric_response(metric: BodyMetric, user_timezone: ZoneInfo) -> BodyMetricResponse:
     return BodyMetricResponse(
         id=metric.id,
         user_id=metric.user_id,
@@ -31,9 +74,9 @@ def _body_metric_response(metric: BodyMetric, user_timezone) -> BodyMetricRespon
         chest_cm=metric.chest_cm,
         hip_cm=metric.hip_cm,
         notes=metric.notes,
-        logged_at=utc_naive_to_timezone(metric.logged_at, user_timezone),
-        created_at=utc_naive_to_timezone(metric.created_at, user_timezone),
-        updated_at=utc_naive_to_timezone(metric.updated_at, user_timezone),
+        logged_at=utc_storage_to_timezone(metric.logged_at, user_timezone),
+        created_at=utc_storage_to_timezone(metric.created_at, user_timezone),
+        updated_at=utc_storage_to_timezone(metric.updated_at, user_timezone),
     )
 
 
@@ -42,11 +85,11 @@ def _body_metric_response(metric: BodyMetric, user_timezone) -> BodyMetricRespon
 def get_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> Profile:
+) -> ProfileResponse:
     profile = db.scalar(select(Profile).where(Profile.user_id == current_user.id))
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
-    return profile
+    return _profile_response(profile)
 
 
 @router.put("/api/profile", response_model=ProfileResponse)
@@ -54,7 +97,7 @@ def upsert_profile(
     payload: ProfileUpsert,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> Profile:
+) -> ProfileResponse:
     profile = db.scalar(select(Profile).where(Profile.user_id == current_user.id))
     values = payload.model_dump()
     if profile is None:
@@ -66,7 +109,7 @@ def upsert_profile(
 
     db.commit()
     db.refresh(profile)
-    return profile
+    return _profile_response(profile)
 
 
 @router.put("/api/profile/goal", response_model=GoalResponse)
@@ -74,7 +117,7 @@ def upsert_active_goal(
     payload: GoalUpsert,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> Goal:
+) -> GoalResponse:
     active_goals = list(
         db.scalars(
             select(Goal)
@@ -97,7 +140,8 @@ def upsert_active_goal(
 
     db.commit()
     db.refresh(active_goal)
-    return active_goal
+    user_timezone = get_user_timezone(db, current_user.id)
+    return _goal_response(active_goal, user_timezone)
 
 
 @router.post(
@@ -113,7 +157,7 @@ def create_body_metric(
     user_timezone = get_user_timezone(db, current_user.id)
     metric = BodyMetric(
         user_id=current_user.id,
-        **{**payload.model_dump(), "logged_at": to_utc_naive(payload.logged_at)},
+        **{**payload.model_dump(), "logged_at": to_utc_storage(payload.logged_at)},
     )
     db.add(metric)
     db.commit()

@@ -239,6 +239,30 @@ def _save_profile_timezone(client, headers, timezone="Asia/Shanghai"):
     return response.json()
 
 
+def test_create_food_response_renders_all_timestamps_in_profile_timezone(auth_client):
+    headers = _auth_headers(auth_client)
+    _save_profile_timezone(auth_client, headers, "Asia/Shanghai")
+
+    response = auth_client.post(
+        "/api/records/food",
+        headers=headers,
+        json={
+            "original_text": "breakfast",
+            "calories": 500,
+            "protein_g": 35,
+            "carb_g": 40,
+            "fat_g": 20,
+            "logged_at": "2026-07-20T08:30:00+08:00",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["logged_at"].endswith("+08:00")
+    assert payload["created_at"].endswith("+08:00")
+    assert payload["updated_at"].endswith("+08:00")
+
+
 def test_daily_summary_uses_profile_timezone_local_date_bounds(auth_client):
     headers = _auth_headers(auth_client)
     _save_profile_timezone(auth_client, headers, "Asia/Shanghai")

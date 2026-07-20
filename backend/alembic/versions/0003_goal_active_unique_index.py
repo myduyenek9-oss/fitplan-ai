@@ -22,13 +22,20 @@ def upgrade() -> None:
             """
             UPDATE goals
             SET is_active = false
-            WHERE is_active = true
-              AND id NOT IN (
-                SELECT max(id)
-                FROM goals
-                WHERE is_active = true
-                GROUP BY user_id
-              )
+            WHERE id IN (
+                SELECT id
+                FROM (
+                    SELECT
+                        id,
+                        row_number() OVER (
+                            PARTITION BY user_id
+                            ORDER BY updated_at DESC, id DESC
+                        ) AS active_rank
+                    FROM goals
+                    WHERE is_active = true
+                ) AS ranked_active_goals
+                WHERE active_rank > 1
+            )
             """
         )
     )

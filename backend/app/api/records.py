@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.api.time_utils import (
     get_user_timezone,
-    local_date_to_utc_naive_bounds,
-    to_utc_naive,
-    utc_naive_to_timezone,
+    local_date_to_utc_storage_bounds,
+    to_utc_storage,
+    utc_storage_to_timezone,
 )
 from app.models.goal import Goal
 from app.models.record import ExerciseLog, FoodLog
@@ -43,9 +43,9 @@ def _food_log_response(record: FoodLog, user_timezone) -> FoodLogResponse:
         carb_g=record.carb_g,
         fat_g=record.fat_g,
         status=record.status,
-        logged_at=utc_naive_to_timezone(record.logged_at, user_timezone),
-        created_at=utc_naive_to_timezone(record.created_at, user_timezone),
-        updated_at=utc_naive_to_timezone(record.updated_at, user_timezone),
+        logged_at=utc_storage_to_timezone(record.logged_at, user_timezone),
+        created_at=utc_storage_to_timezone(record.created_at, user_timezone),
+        updated_at=utc_storage_to_timezone(record.updated_at, user_timezone),
     )
 
 
@@ -57,9 +57,9 @@ def _exercise_log_response(record: ExerciseLog, user_timezone) -> ExerciseLogRes
         description=record.description,
         duration_minutes=record.duration_minutes,
         calories_burned=record.calories_burned,
-        logged_at=utc_naive_to_timezone(record.logged_at, user_timezone),
-        created_at=utc_naive_to_timezone(record.created_at, user_timezone),
-        updated_at=utc_naive_to_timezone(record.updated_at, user_timezone),
+        logged_at=utc_storage_to_timezone(record.logged_at, user_timezone),
+        created_at=utc_storage_to_timezone(record.created_at, user_timezone),
+        updated_at=utc_storage_to_timezone(record.updated_at, user_timezone),
     )
 
 
@@ -85,7 +85,7 @@ def create_food_log(
 ) -> FoodLogResponse:
     user_timezone = get_user_timezone(db, current_user.id)
     values = payload.model_dump()
-    values["logged_at"] = to_utc_naive(payload.logged_at)
+    values["logged_at"] = to_utc_storage(payload.logged_at)
     record = FoodLog(user_id=current_user.id, status="active", **values)
     db.add(record)
     db.commit()
@@ -101,7 +101,7 @@ def create_exercise_log(
 ) -> ExerciseLogResponse:
     user_timezone = get_user_timezone(db, current_user.id)
     values = payload.model_dump()
-    values["logged_at"] = to_utc_naive(payload.logged_at)
+    values["logged_at"] = to_utc_storage(payload.logged_at)
     record = ExerciseLog(user_id=current_user.id, **values)
     db.add(record)
     db.commit()
@@ -116,7 +116,7 @@ def get_daily_summary(
     db: Session = Depends(get_db),
 ) -> DailySummaryResponse:
     user_timezone = get_user_timezone(db, current_user.id)
-    start, end = local_date_to_utc_naive_bounds(date_, user_timezone)
+    start, end = local_date_to_utc_storage_bounds(date_, user_timezone)
     food_logs = list(
         db.scalars(
             select(FoodLog).where(
@@ -214,7 +214,7 @@ def update_food_log(
             detail=f"Fields cannot be null: {', '.join(sorted(null_fields))}",
         )
     if "logged_at" in values:
-        values["logged_at"] = to_utc_naive(values["logged_at"])
+        values["logged_at"] = to_utc_storage(values["logged_at"])
     for field, value in values.items():
         setattr(record, field, value)
 

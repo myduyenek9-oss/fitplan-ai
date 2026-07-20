@@ -1,14 +1,18 @@
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.errors import PlanConflictError
 from app.db.base import Base
 from app.models.plan import Plan, PlanDay
 from app.models.user import User
-from app.schemas.plan import MealPlan, PlanCreate, PlanDayCreate, WorkoutPlan
+from app.schemas.plan import MealPlan, PlanCreate, PlanDay as PlanDaySchema, PlanDayCreate, WorkoutPlan
+from sqlalchemy.exc import IntegrityError
+
+import app.db.session  # noqa: F401 - registers SQLite connection hooks
 from app.services.plan_service import DeterministicPlanGenerator, PlanService
 
 
@@ -139,3 +143,105 @@ def test_activate_plan_deactivates_previous_plan_and_enforces_user_scope():
 def test_plan_create_validates_exactly_seven_consecutive_days(days):
     with pytest.raises(ValueError):
         PlanCreate(title="Invalid", days=days)
+
+
+@pytest.mark.parametrize("value", ["Infinity", "NaN"])
+def test_plan_float_schemas_reject_non_finite_values(value):
+    with pytest.raises(ValueError):
+        MealPlan(
+            name="Meal",
+            calories=value,
+            protein_g=30,
+            carb_g=50,
+            fat_g=10,
+        )
+    with pytest.raises(ValueError):
+        WorkoutPlan(
+            kind="workout",
+            title="Workout",
+            instructions="Train",
+            duration_minutes=value,
+        )
+    with pytest.raises(ValueError):
+        PlanDaySchema(
+            date=date(2026, 7, 20),
+            calorie_target=value,
+            meals=[MealPlan(name="Meal", calories=500, protein_g=30, carb_g=50, fat_g=10)],
+            training_instruction=WorkoutPlan(
+                kind="workout", title="Workout", instructions="Train", duration_minutes=30
+            ),
+        )
+
+
+def test_create_plan_conflict_rolls_back_and_preserves_previous_active_plan(monkeypatch):
+    db = _session()
+    user = _user(db)
+    service = PlanService(generator=DeterministicPlanGenerator())
+    first = service.create_plan(
+        db,
+        user_id=user.id,
+        payload=PlanCreate(title="First", days=_days(date(2026, 7, 20))),
+    )
+
+    def fail_commit():
+        raise IntegrityError("active plan conflict", {}, Exception("unique"))
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+    with pytest.raises(PlanConflictError):
+        service.create_plan(
+            db,
+            user_id=user.id,
+            payload=PlanCreate(title="Second", days=_days(date(2026, 7, 27))),
+        )
+
+    monkeypatch.undo()
+    current = service.get_current_plan(db, user_id=user.id)
+    assert current is not None
+    assert current.id == first.id
+    assert current.is_active is True
+
+
+def test_sqlite_foreign_keys_are_enabled_and_plan_rows_cascade_with_user_delete():
+    db = _session()
+    user = _user(db)
+    service = PlanService(generator=DeterministicPlanGenerator())
+    plan = service.create_plan(
+        db,
+        user_id=user.id,
+        payload=PlanCreate(title="First", days=_days(date(2026, 7, 20))),
+    )
+
+    assert db.scalar(text("PRAGMA foreign_keys")) == 1
+    plan_id = plan.id
+    db.delete(user)
+    db.commit()
+
+    assert db.get(Plan, plan_id) is None
+    assert db.scalar(select(PlanDay.id).where(PlanDay.plan_id == plan_id)) is None
+
+
+def test_activate_plan_conflict_rolls_back_and_preserves_current_active_plan(monkeypatch):
+    db = _session()
+    user = _user(db)
+    service = PlanService(generator=DeterministicPlanGenerator())
+    first = service.create_plan(
+        db,
+        user_id=user.id,
+        payload=PlanCreate(title="First", days=_days(date(2026, 7, 20))),
+    )
+    second = service.create_plan(
+        db,
+        user_id=user.id,
+        payload=PlanCreate(title="Second", days=_days(date(2026, 7, 27))),
+    )
+
+    def fail_commit():
+        raise IntegrityError("active plan conflict", {}, Exception("unique"))
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+    with pytest.raises(PlanConflictError):
+        service.activate_plan(db, user_id=user.id, plan_id=first.id)
+
+    monkeypatch.undo()
+    assert service.get_plan(db, user_id=user.id, plan_id=first.id).is_active is False
+    assert service.get_plan(db, user_id=user.id, plan_id=second.id).is_active is True

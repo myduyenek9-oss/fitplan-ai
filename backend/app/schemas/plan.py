@@ -1,7 +1,9 @@
 from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, ValidationError, model_validator
+
+from app.core.errors import PlanIntegrityError
 
 MealType = Literal["breakfast", "lunch", "dinner", "snack"]
 WorkoutKind = Literal["workout", "rest"]
@@ -10,22 +12,22 @@ WorkoutKind = Literal["workout", "rest"]
 class MealPlan(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     meal_type: MealType | None = None
-    calories: float = Field(gt=0)
-    protein_g: float = Field(ge=0)
-    carb_g: float = Field(ge=0)
-    fat_g: float = Field(ge=0)
+    calories: FiniteFloat = Field(gt=0)
+    protein_g: FiniteFloat = Field(ge=0)
+    carb_g: FiniteFloat = Field(ge=0)
+    fat_g: FiniteFloat = Field(ge=0)
 
 
 class WorkoutPlan(BaseModel):
     kind: WorkoutKind
     title: str = Field(min_length=1, max_length=256)
     instructions: str = Field(min_length=1, max_length=2048)
-    duration_minutes: float | None = Field(default=None, gt=0)
+    duration_minutes: FiniteFloat | None = Field(default=None, gt=0)
 
 
 class PlanDay(BaseModel):
     date: date
-    calorie_target: float = Field(gt=0)
+    calorie_target: FiniteFloat = Field(gt=0)
     meals: list[MealPlan] = Field(min_length=1)
     training_instruction: WorkoutPlan
 
@@ -70,23 +72,27 @@ class PlanSummary(BaseModel):
 
     @classmethod
     def from_orm_plan(cls, plan: Any) -> "PlanSummary":
-        days = [
-            PlanDay(
-                date=day.date,
-                calorie_target=day.calorie_target,
-                meals=day.meals,
-                training_instruction=day.training_instruction,
+        try:
+            days = [
+                PlanDay(
+                    date=day.date,
+                    calorie_target=day.calorie_target,
+                    meals=day.meals,
+                    training_instruction=day.training_instruction,
+                )
+                for day in plan.days
+            ]
+            validated_plan = PlanCreate(title=plan.title, days=days)
+            return cls(
+                id=plan.id,
+                user_id=plan.user_id,
+                title=validated_plan.title,
+                start_date=validated_plan.days[0].date,
+                end_date=validated_plan.days[-1].date,
+                is_active=plan.is_active,
+                days=validated_plan.days,
+                created_at=plan.created_at,
+                updated_at=plan.updated_at,
             )
-            for day in plan.days
-        ]
-        return cls(
-            id=plan.id,
-            user_id=plan.user_id,
-            title=plan.title,
-            start_date=plan.start_date,
-            end_date=plan.end_date,
-            is_active=plan.is_active,
-            days=days,
-            created_at=plan.created_at,
-            updated_at=plan.updated_at,
-        )
+        except (ValidationError, TypeError, ValueError, AttributeError) as exc:
+            raise PlanIntegrityError from exc

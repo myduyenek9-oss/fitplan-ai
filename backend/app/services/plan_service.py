@@ -1,9 +1,12 @@
 from datetime import date, timedelta
 from abc import ABC, abstractmethod
 
+from pydantic import ValidationError
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.errors import PlanConflictError, PlanIntegrityError
 from app.models.plan import Plan, PlanDay
 from app.schemas.plan import PlanCreate, PlanDay as PlanDaySchema
 
@@ -50,12 +53,12 @@ class PlanService:
         self.generator = generator or DeterministicPlanGenerator()
 
     def create_plan(self, db: Session, *, user_id: int, payload: PlanCreate) -> Plan:
-        self._deactivate_user_plans(db, user_id=user_id)
+        validated_payload = self._validate_payload(payload)
         plan = Plan(
             user_id=user_id,
-            title=payload.title,
-            start_date=payload.days[0].date,
-            end_date=payload.days[-1].date,
+            title=validated_payload.title,
+            start_date=validated_payload.days[0].date,
+            end_date=validated_payload.days[-1].date,
             is_active=True,
             days=[
                 PlanDay(
@@ -64,15 +67,24 @@ class PlanService:
                     meals_json=[meal.model_dump(mode="json") for meal in day.meals],
                     training_instruction_json=day.training_instruction.model_dump(mode="json"),
                 )
-                for day in payload.days
+                for day in validated_payload.days
             ],
         )
-        db.add(plan)
-        db.commit()
+        try:
+            self._deactivate_user_plans(db, user_id=user_id)
+            db.add(plan)
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise PlanConflictError from exc
         return self._load_plan(db, plan.id)
 
     def generate_plan(self, db: Session, *, user_id: int, start_date: date, title: str = "7-day plan") -> Plan:
-        payload = PlanCreate(title=title, days=self.generator.generate(start_date=start_date))
+        try:
+            generated_days = self.generator.generate(start_date=start_date)
+            payload = PlanCreate(title=title, days=generated_days)
+        except (ValidationError, TypeError, ValueError) as exc:
+            raise PlanIntegrityError from exc
         return self.create_plan(db, user_id=user_id, payload=payload)
 
     def get_current_plan(self, db: Session, *, user_id: int) -> Plan | None:
@@ -94,10 +106,22 @@ class PlanService:
         plan = self.get_plan(db, user_id=user_id, plan_id=plan_id)
         if plan is None:
             return None
-        self._deactivate_user_plans(db, user_id=user_id)
-        plan.is_active = True
-        db.commit()
+        try:
+            self._deactivate_user_plans(db, user_id=user_id)
+            plan.is_active = True
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise PlanConflictError from exc
         return self._load_plan(db, plan.id)
+
+
+    @staticmethod
+    def _validate_payload(payload: PlanCreate) -> PlanCreate:
+        try:
+            return PlanCreate.model_validate(payload.model_dump(mode="json"))
+        except (ValidationError, TypeError, ValueError) as exc:
+            raise PlanIntegrityError from exc
 
     @staticmethod
     def _deactivate_user_plans(db: Session, *, user_id: int) -> None:

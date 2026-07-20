@@ -1,7 +1,10 @@
 from datetime import date, timedelta
 
+import pytest
+from app.core.errors import PlanConflictError
+
 from app.schemas.plan import MealPlan, PlanDayCreate, WorkoutPlan
-from app.services.plan_service import PlanGenerator
+from app.services.plan_service import PlanGenerator, PlanService
 
 
 PASSWORD = "correct horse battery staple"
@@ -163,3 +166,90 @@ def test_current_plan_returns_404_when_no_plan_exists(auth_client):
     response = auth_client.get("/api/plans/current", headers=headers)
 
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("field_path, value", [("calorie_target", "Infinity"), ("protein_g", "NaN")])
+def test_plan_api_rejects_non_finite_float_values(auth_client, field_path, value):
+    headers = _auth_headers(auth_client)
+    payload = _plan_payload(date(2026, 7, 20))
+    if field_path == "calorie_target":
+        payload["days"][0][field_path] = value
+    else:
+        payload["days"][0]["meals"][0][field_path] = value
+
+    response = auth_client.post("/api/plans", headers=headers, json=payload)
+
+    assert response.status_code == 422
+
+
+def test_plan_detail_and_activate_require_authentication(auth_client):
+    assert auth_client.get("/api/plans/1").status_code == 401
+    assert auth_client.post("/api/plans/1/activate").status_code == 401
+
+
+def test_missing_plan_detail_and_activate_return_404(auth_client):
+    headers = _auth_headers(auth_client)
+
+    assert auth_client.get("/api/plans/999999", headers=headers).status_code == 404
+    assert auth_client.post("/api/plans/999999/activate", headers=headers).status_code == 404
+
+
+def test_repeated_activate_is_stable(auth_client):
+    headers = _auth_headers(auth_client)
+    created = auth_client.post(
+        "/api/plans", headers=headers, json=_plan_payload(date(2026, 7, 20))
+    )
+    plan_id = created.json()["id"]
+
+    first = auth_client.post(f"/api/plans/{plan_id}/activate", headers=headers)
+    second = auth_client.post(f"/api/plans/{plan_id}/activate", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["id"] == plan_id
+    assert second.json()["is_active"] is True
+
+
+def test_plan_conflict_is_mapped_to_409(monkeypatch, auth_client):
+    headers = _auth_headers(auth_client)
+
+    def fail_create(*args, **kwargs):
+        raise PlanConflictError
+
+    monkeypatch.setattr(PlanService, "create_plan", fail_create)
+    response = auth_client.post(
+        "/api/plans", headers=headers, json=_plan_payload(date(2026, 7, 20))
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Plan conflict"
+
+
+class InvalidPlanGenerator(PlanGenerator):
+    def generate(self, *, start_date: date) -> list[PlanDayCreate]:
+        return []
+
+
+def test_invalid_generated_plan_returns_controlled_error_and_preserves_current_plan(auth_client):
+    from app.api.plans import get_plan_generator
+    from app.main import app
+
+    headers = _auth_headers(auth_client)
+    existing = auth_client.post(
+        "/api/plans", headers=headers, json=_plan_payload(date(2026, 7, 20), "Existing")
+    )
+    existing_id = existing.json()["id"]
+    app.dependency_overrides[get_plan_generator] = lambda: InvalidPlanGenerator()
+
+    response = auth_client.post(
+        "/api/plans/generate",
+        headers=headers,
+        json={"start_date": "2026-07-27", "title": "Invalid"},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Plan data is invalid"
+    current = auth_client.get("/api/plans/current", headers=headers)
+    assert current.status_code == 200
+    assert current.json()["id"] == existing_id
+    assert current.json()["is_active"] is True

@@ -1,10 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.api.auth import router as auth_router
 from app.api.calorie import router as calorie_router
 from app.api.plans import router as plans_router
 from app.api.profile import router as profile_router
 from app.api.records import router as records_router
+from app.core.errors import PlanConflictError, PlanIntegrityError
 
 app = FastAPI(title="FitPlan AI API", version="0.1.0")
 app.include_router(auth_router)
@@ -17,3 +19,13 @@ app.include_router(plans_router)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.exception_handler(PlanConflictError)
+async def plan_conflict_handler(_request: Request, _exc: PlanConflictError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": "Plan conflict"})
+
+
+@app.exception_handler(PlanIntegrityError)
+async def plan_integrity_handler(_request: Request, _exc: PlanIntegrityError) -> JSONResponse:
+    return JSONResponse(status_code=500, content={"detail": "Plan data is invalid"})

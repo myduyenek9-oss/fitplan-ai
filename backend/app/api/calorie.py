@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.schemas.calorie import CaloriePreviewRequest, CalorieTargets
-from app.services.calorie import calculate_targets
+from app.services.calorie import CalorieCalculationError, calculate_targets
 
 router = APIRouter(prefix="/api/calorie", tags=["calorie"])
 
@@ -19,5 +19,5 @@ def preview_calorie_targets(payload: CaloriePreviewRequest) -> CalorieTargets:
             activity_level=payload.activity_level,
             goal=payload.goal,
         )
-    except ValueError as exc:
+    except CalorieCalculationError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc

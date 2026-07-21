@@ -5,6 +5,8 @@ import { MetricCard } from "./components/MetricCard";
 import { SectionCard } from "./components/SectionCard";
 import { QuickRecordComposer } from "./features/dashboard/QuickRecordComposer";
 import type { NaturalLanguageFoodResult } from "./lib/fitplan-api";
+import { getAccessToken } from "./lib/api";
+import { OnboardingPage } from "./pages/OnboardingPage";
 import type { AiSuggestion, DailyPlanSummary, MetricSummary, RecordSummary } from "./lib/types";
 
 const initialDailyPlan: DailyPlanSummary = {
@@ -107,7 +109,7 @@ function toRecordSummary(result: NaturalLanguageFoodResult): RecordSummary {
   };
 }
 
-function App() {
+export function DashboardPreview() {
   const [dailyPlan, setDailyPlan] = useState(initialDailyPlan);
   const [remainingCalories, setRemainingCalories] = useState(
     initialDailyPlan.calorieTarget - initialDailyPlan.caloriesConsumed,
@@ -222,6 +224,16 @@ function App() {
       </div>
     </AppShell>
   );
+}
+
+function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(getAccessToken()));
+
+  if (!isAuthenticated) {
+    return <OnboardingPage onAuthenticated={() => setIsAuthenticated(true)} />;
+  }
+
+  return <DashboardPreview />;
 }
 
 export default App;

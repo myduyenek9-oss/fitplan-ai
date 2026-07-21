@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
+
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+export const ACCESS_TOKEN_STORAGE_KEY = "fitplan.ai.accessToken";
 
 export class ApiError extends Error {
   status: number;
@@ -11,6 +13,30 @@ export class ApiError extends Error {
     this.status = status;
     this.details = details;
   }
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+}
+
+export function setAccessToken(token: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+}
+
+export function clearAccessToken(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
 }
 
 async function parseResponse(response: Response): Promise<unknown> {
@@ -127,6 +153,11 @@ function buildHeaders(init?: RequestInit): Headers {
 
   if (!headers.has("content-type") && shouldSetJsonContentType(init?.body)) {
     headers.set("Content-Type", "application/json");
+  }
+
+  const accessToken = getAccessToken();
+  if (!headers.has("authorization") && accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
 
   return headers;

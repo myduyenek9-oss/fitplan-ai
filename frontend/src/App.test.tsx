@@ -1,8 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { beforeEach } from "vitest";
+import { ACCESS_TOKEN_STORAGE_KEY } from "./lib/api";
 import App from "./App";
 
 describe("App", () => {
+  beforeEach(() => {
+    window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, "test-token");
+  });
+
   it("renders the editorial dashboard preview", () => {
     render(<App />);
 

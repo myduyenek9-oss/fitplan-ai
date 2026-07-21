@@ -1269,3 +1269,54 @@ svg {
   .coach-composer { grid-template-columns: 1fr; }
   .coach-composer .editorial-button { width: 100%; justify-content: center; }
 }
+
+
+.records-page { display: grid; gap: 18px; }
+.records-summary { display: grid; grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid rgba(18, 63, 52, 0.12); border-radius: var(--radius-card); background: rgba(255, 253, 248, 0.82); box-shadow: var(--shadow-soft); }
+.records-summary > label, .records-summary > div { display: grid; align-content: center; gap: 6px; min-height: 96px; padding: 14px 16px; border-radius: 18px; background: var(--color-surface-muted); color: var(--color-muted); font-size: 0.76rem; font-weight: 780; }
+.records-summary input { min-width: 0; padding: 8px 2px 1px; border: 0; border-bottom: 1px solid rgba(18, 63, 52, 0.17); background: transparent; color: var(--color-primary-strong); font-weight: 800; }
+.records-summary p, .records-summary strong { margin: 0; }
+.records-summary strong { color: var(--color-primary-strong); font-size: clamp(1.15rem, 2.5vw, 1.65rem); letter-spacing: -0.05em; }
+.records-summary small { font-size: 0.7rem; letter-spacing: normal; }
+.records-suggestion { display: flex; align-items: center; gap: 14px; padding: 17px 19px; border: 1px solid rgba(228, 139, 74, 0.3); border-radius: 21px; background: var(--color-surface-warm); }
+.records-suggestion > span { display: grid; flex: 0 0 auto; place-items: center; width: 36px; height: 36px; border-radius: 13px; background: rgba(255, 253, 248, 0.8); color: var(--color-accent-strong); }
+.records-suggestion > div { min-width: 0; flex: 1; }
+.records-suggestion p, .records-suggestion strong { margin: 0; }
+.records-suggestion p { color: var(--color-accent-strong); font-size: 0.75rem; font-weight: 820; }
+.records-suggestion strong { display: block; margin-top: 4px; color: var(--color-primary-strong); font-size: 0.9rem; line-height: 1.55; }
+.records-composers { display: grid; gap: 16px; }
+.record-composer { display: grid; align-content: start; gap: 10px; padding: 23px; border-radius: var(--radius-card); }
+.record-composer--food { background: linear-gradient(135deg, var(--color-surface-warm), rgba(255, 253, 248, 0.85)); border: 1px solid rgba(228, 139, 74, 0.28); }
+.record-composer--exercise { background: linear-gradient(135deg, var(--color-primary-soft), rgba(255, 253, 248, 0.85)); border: 1px solid rgba(18, 63, 52, 0.16); }
+.record-composer p, .record-composer h2, .record-composer span { margin: 0; }
+.record-composer p { color: var(--color-accent-strong); font-size: 0.77rem; font-weight: 850; letter-spacing: 0.1em; text-transform: uppercase; }
+.record-composer h2 { color: var(--color-primary-strong); font-size: 1.25rem; letter-spacing: -0.035em; }
+.record-composer span { color: var(--color-muted); font-size: 0.82rem; line-height: 1.55; }
+.record-composer textarea { width: 100%; min-height: 102px; margin-top: 3px; padding: 13px; border: 1px solid rgba(18, 63, 52, 0.15); border-radius: 17px; background: rgba(255, 253, 248, 0.74); color: var(--color-text); resize: vertical; line-height: 1.55; }
+.record-composer .editorial-button { justify-self: start; margin-top: 3px; }
+.records-list-grid { display: grid; gap: 18px; }
+.records-timeline { display: grid; }
+.records-timeline__item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 16px 0; border-bottom: 1px solid rgba(18, 63, 52, 0.1); }
+.records-timeline__item:first-child { border-top: 1px solid rgba(18, 63, 52, 0.1); }
+.records-timeline__item > span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 12px; background: var(--color-surface-warm); font-size: 0.92rem; }
+.records-timeline__item > .records-timeline__icon--exercise { background: var(--color-primary-soft); color: var(--color-primary-strong); font-weight: 900; }
+.records-timeline__item p, .records-timeline__item h3, .records-timeline__item small, .records-timeline__item strong { margin: 0; }
+.records-timeline__item p { color: var(--color-muted); font-size: 0.74rem; font-weight: 760; }
+.records-timeline__item h3 { margin-top: 3px; color: var(--color-primary-strong); font-size: 0.94rem; line-height: 1.4; }
+.records-timeline__item small { display: block; margin-top: 5px; color: var(--color-muted); font-size: 0.76rem; line-height: 1.45; }
+.records-timeline__item aside { display: grid; justify-items: end; gap: 8px; white-space: nowrap; }
+.records-timeline__item strong { color: var(--color-primary-strong); font-size: 0.81rem; }
+.records-timeline__item aside button { padding: 5px 8px; border-radius: 9px; background: rgba(18, 63, 52, 0.08); color: var(--color-primary-strong); font-size: 0.72rem; font-weight: 790; }
+.records-timeline__item aside button:hover { background: var(--color-primary-soft); }
+.records-timeline__empty { margin: 0; padding: 19px 2px 3px; color: var(--color-muted); font-size: 0.88rem; }
+
+@media (min-width: 820px) {
+  .records-composers, .records-list-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .records-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .records-summary > label { grid-column: 1 / -1; min-height: 74px; }
+  .records-suggestion { align-items: flex-start; flex-wrap: wrap; }
+  .records-suggestion .editorial-button { margin-left: 50px; }
+}

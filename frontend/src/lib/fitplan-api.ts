@@ -66,12 +66,26 @@ export interface NaturalLanguageFoodResult {
   conversation_id: number;
 }
 
+export interface NaturalLanguageExerciseResult {
+  record: ExerciseRecord;
+  daily_summary: DailySummary;
+  adjustment_suggestion: string;
+  conversation_id: number;
+}
+
 export function getDailySummary(date: string): Promise<DailySummary> {
   return request<DailySummary>(`/api/records/daily?date=${encodeURIComponent(date)}`);
 }
 
 export function logFoodFromText(text: string, today: string): Promise<NaturalLanguageFoodResult> {
   return request<NaturalLanguageFoodResult>("/api/records/food/natural-language", {
+    method: "POST",
+    body: JSON.stringify({ text, today }),
+  });
+}
+
+export function logExerciseFromText(text: string, today: string): Promise<NaturalLanguageExerciseResult> {
+  return request<NaturalLanguageExerciseResult>("/api/records/exercise/natural-language", {
     method: "POST",
     body: JSON.stringify({ text, today }),
   });

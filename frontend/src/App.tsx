@@ -12,6 +12,7 @@ import { CoachPage } from "./pages/CoachPage";
 import { InitialSetupPage } from "./pages/InitialSetupPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PlansPage } from "./pages/PlansPage";
+import { RecordsPage } from "./pages/RecordsPage";
 
 const initialDailyPlan: DailyPlanSummary = {
   goalLabel: "正在同步你的健康目标",
@@ -170,12 +171,13 @@ function App() {
 
   function navigate(key: NavKey) {
     if (key === "settings") { setScreen("setup"); return; }
-    setActiveNav(key === "records" ? "home" : key);
+    setActiveNav(key);
   }
 
   if (screen === "auth") return <OnboardingPage onAuthenticated={() => setScreen("checking")} />;
   if (screen === "checking") return <main className="app-loading" aria-live="polite">正在打开你的健康档案…</main>;
   if (screen === "setup") return <InitialSetupPage onCompleted={() => { setActiveNav("home"); setScreen("dashboard"); }} />;
+  if (activeNav === "records") return <RecordsPage onNavigate={navigate} />;
   if (activeNav === "plans") return <PlansPage onNavigate={navigate} />;
   if (activeNav === "coach") return <CoachPage onNavigate={navigate} />;
   return <DashboardPreview onNeedSetup={() => setScreen("setup")} onNavigate={navigate} />;

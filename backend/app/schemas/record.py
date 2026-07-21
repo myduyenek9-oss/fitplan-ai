@@ -115,3 +115,5 @@ class DailySummaryResponse(BaseModel):
     remaining_calories: float | None
     macro_completion_percentages: MacroCompletionPercentages
     food_status_counts: dict[FoodStatus, int]
+    food_records: list[FoodLogResponse] = Field(default_factory=list)
+    exercise_records: list[ExerciseLogResponse] = Field(default_factory=list)

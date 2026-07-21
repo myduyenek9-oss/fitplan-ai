@@ -251,6 +251,14 @@ def get_daily_summary(
         remaining_calories=remaining_calories,
         macro_completion_percentages=macro_percentages,
         food_status_counts=status_counts,
+        food_records=[
+            _food_log_response(record, user_timezone)
+            for record in sorted(active_food_logs, key=lambda item: (item.logged_at, item.id))
+        ],
+        exercise_records=[
+            _exercise_log_response(record, user_timezone)
+            for record in sorted(exercise_logs, key=lambda item: (item.logged_at, item.id))
+        ],
     )
 
 

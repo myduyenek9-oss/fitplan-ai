@@ -424,3 +424,46 @@ def test_daily_summary_uses_latest_active_goal_after_repeated_updates(auth_clien
     assert summary_response.status_code == 200
     assert summary_response.json()["goal"]["daily_calories"] == 2500.0
     assert summary_response.json()["remaining_calories"] == 2000.0
+
+
+def test_daily_summary_includes_active_food_and_exercise_records(auth_client):
+    headers = _auth_headers(auth_client)
+    _save_goal(auth_client, headers)
+
+    food_response = auth_client.post(
+        "/api/records/food",
+        headers=headers,
+        json={
+            "original_text": "Greek yogurt and banana",
+            "parsed_content": {"items": [{"name": "yogurt"}]},
+            "meal_type": "breakfast",
+            "calories": 320,
+            "protein_g": 24,
+            "carb_g": 40,
+            "fat_g": 6,
+            "logged_at": "2026-07-21T08:00:00Z",
+        },
+    )
+    exercise_response = auth_client.post(
+        "/api/records/exercise",
+        headers=headers,
+        json={
+            "exercise_type": "walking",
+            "description": "Morning walk",
+            "duration_minutes": 30,
+            "calories_burned": 160,
+            "logged_at": "2026-07-21T09:00:00Z",
+        },
+    )
+
+    assert food_response.status_code == 201
+    assert exercise_response.status_code == 201
+
+    response = auth_client.get("/api/records/daily?date=2026-07-21", headers=headers)
+
+    assert response.status_code == 200
+    summary = response.json()
+    assert [record["id"] for record in summary["food_records"]] == [food_response.json()["id"]]
+    assert [record["id"] for record in summary["exercise_records"]] == [exercise_response.json()["id"]]
+    assert summary["food_records"][0]["original_text"] == "Greek yogurt and banana"
+    assert summary["exercise_records"][0]["exercise_type"] == "walking"

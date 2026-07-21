@@ -32,14 +32,76 @@ async function parseResponse(response: Response): Promise<unknown> {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function safeStringify(value: unknown): string | undefined {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function formatLocation(location: unknown): string | undefined {
+  if (Array.isArray(location)) {
+    return location.map(String).join(".");
+  }
+
+  if (typeof location === "string") {
+    return location;
+  }
+
+  return undefined;
+}
+
+function formatDetailEntry(entry: unknown): string | undefined {
+  if (!isRecord(entry)) {
+    return typeof entry === "string" ? entry : safeStringify(entry);
+  }
+
+  const message =
+    typeof entry.msg === "string"
+      ? entry.msg
+      : typeof entry.message === "string"
+        ? entry.message
+        : undefined;
+
+  if (message === undefined) {
+    return safeStringify(entry);
+  }
+
+  const location = formatLocation(entry.loc);
+  return location ? `${location}: ${message}` : message;
+}
+
+function formatDetail(detail: unknown): string | undefined {
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const entries = detail
+      .map(formatDetailEntry)
+      .filter((entry): entry is string => Boolean(entry));
+    return entries.length > 0 ? entries.join("; ") : undefined;
+  }
+
+  if (isRecord(detail)) {
+    return safeStringify(detail);
+  }
+
+  return undefined;
+}
+
 function getErrorMessage(payload: unknown, status: number): string {
-  if (
-    payload !== null &&
-    typeof payload === "object" &&
-    "detail" in payload &&
-    typeof payload.detail === "string"
-  ) {
-    return payload.detail;
+  if (isRecord(payload) && "detail" in payload) {
+    const formattedDetail = formatDetail(payload.detail);
+
+    if (formattedDetail) {
+      return formattedDetail;
+    }
   }
 
   return `Request failed with status ${status}`;

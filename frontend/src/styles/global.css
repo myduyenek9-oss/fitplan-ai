@@ -678,3 +678,116 @@ svg {
     align-items: start;
   }
 }
+
+.quick-record-composer {
+  display: grid;
+  gap: 14px;
+  padding: clamp(20px, 4vw, 28px);
+  border: 1px solid rgba(228, 139, 74, 0.28);
+  border-radius: var(--radius-card);
+  background:
+    radial-gradient(circle at 94% 8%, rgba(228, 139, 74, 0.2), transparent 10rem),
+    var(--color-surface-warm);
+  box-shadow: var(--shadow-soft);
+}
+
+.quick-record-composer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.quick-record-composer__eyebrow {
+  margin: 0 0 8px;
+  color: var(--color-accent-strong);
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.quick-record-composer h2 {
+  margin: 0;
+  color: var(--color-primary-strong);
+  font-size: clamp(1.25rem, 3vw, 1.7rem);
+  font-weight: 850;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.quick-record-composer__spark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 15px;
+  background: rgba(255, 253, 248, 0.68);
+  color: var(--color-accent-strong);
+  font-size: 1.2rem;
+}
+
+.quick-record-composer__label {
+  color: var(--color-primary-strong);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.quick-record-composer__input {
+  width: 100%;
+  resize: vertical;
+  padding: 14px 16px;
+  border: 1px solid rgba(154, 75, 31, 0.22);
+  border-radius: 20px;
+  background: rgba(255, 253, 248, 0.82);
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+.quick-record-composer__input::placeholder {
+  color: var(--color-muted);
+}
+
+.quick-record-composer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.quick-record-composer__actions p {
+  flex: 1 1 220px;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.quick-record-composer__error,
+.quick-record-composer__result {
+  margin: 0;
+  padding: 13px 15px;
+  border-radius: 18px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.quick-record-composer__error {
+  border: 1px solid rgba(184, 75, 62, 0.24);
+  background: rgba(255, 240, 238, 0.78);
+  color: var(--color-danger);
+}
+
+.quick-record-composer__result {
+  border: 1px solid rgba(18, 63, 52, 0.14);
+  background: rgba(220, 235, 221, 0.7);
+}
+
+.quick-record-composer__result p {
+  margin: 0;
+}
+
+.quick-record-composer__result p + p {
+  margin-top: 6px;
+  color: var(--color-muted);
+}

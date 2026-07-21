@@ -1,18 +1,19 @@
-﻿import { AppShell } from "./components/AppShell";
+﻿import { useState } from "react";
+import { AppShell } from "./components/AppShell";
 import { EditorialButton } from "./components/EditorialButton";
 import { MetricCard } from "./components/MetricCard";
 import { SectionCard } from "./components/SectionCard";
+import { QuickRecordComposer } from "./features/dashboard/QuickRecordComposer";
+import type { NaturalLanguageFoodResult } from "./lib/fitplan-api";
 import type { AiSuggestion, DailyPlanSummary, MetricSummary, RecordSummary } from "./lib/types";
 
-const dailyPlan: DailyPlanSummary = {
+const initialDailyPlan: DailyPlanSummary = {
   goalLabel: "减脂 · 轻强度训练周",
   calorieTarget: 1850,
   caloriesConsumed: 1280,
   exerciseTarget: "快走 30 分钟 + 上肢训练",
   completionLabel: "今日完成 69%",
 };
-
-const remainingCalories = dailyPlan.calorieTarget - dailyPlan.caloriesConsumed;
 
 const metrics: MetricSummary[] = [
   {
@@ -38,7 +39,7 @@ const metrics: MetricSummary[] = [
   },
 ];
 
-const records: RecordSummary[] = [
+const initialRecords: RecordSummary[] = [
   {
     id: "breakfast",
     category: "food",
@@ -65,13 +66,74 @@ const records: RecordSummary[] = [
   },
 ];
 
-const aiSuggestion: AiSuggestion = {
+const initialAiSuggestion: AiSuggestion = {
   title: "AI 晚餐建议",
   body: "如果晚餐想吃得满足，可以选择番茄牛肉汤 + 半份杂粮饭 + 一盘绿叶菜，控制油脂的同时把蛋白质补够。",
   actionLabel: "让 AI 重新细化",
 };
 
+function localDateString(date = new Date()): string {
+  const timezoneOffsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
+}
+
+function formatTime(value: string): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function mealLabel(mealType: string | null): string {
+  const labels: Record<string, string> = {
+    breakfast: "早餐",
+    lunch: "午餐",
+    dinner: "晚餐",
+    snack: "加餐",
+  };
+  return mealType ? (labels[mealType] ?? "饮食") : "饮食";
+}
+
+function toRecordSummary(result: NaturalLanguageFoodResult): RecordSummary {
+  const { record } = result;
+  return {
+    id: `food-${record.id}`,
+    category: "food",
+    title: `${mealLabel(record.meal_type)} · AI 补记`,
+    detail: record.original_text,
+    calories: Math.round(record.calories),
+    time: formatTime(record.logged_at),
+  };
+}
+
 function App() {
+  const [dailyPlan, setDailyPlan] = useState(initialDailyPlan);
+  const [remainingCalories, setRemainingCalories] = useState(
+    initialDailyPlan.calorieTarget - initialDailyPlan.caloriesConsumed,
+  );
+  const [records, setRecords] = useState(initialRecords);
+  const [aiSuggestion, setAiSuggestion] = useState(initialAiSuggestion);
+
+  function handleFoodRecorded(result: NaturalLanguageFoodResult) {
+    const { daily_summary: summary } = result;
+    const calorieTarget = summary.goal?.daily_calories ?? dailyPlan.calorieTarget;
+    const caloriesConsumed = Math.round(summary.food_totals.calories);
+    const completion = calorieTarget > 0 ? Math.round((caloriesConsumed / calorieTarget) * 100) : 0;
+
+    setDailyPlan((current) => ({
+      ...current,
+      calorieTarget,
+      caloriesConsumed,
+      completionLabel: `今日完成 ${completion}%`,
+    }));
+    setRemainingCalories(
+      Math.round(summary.remaining_calories ?? Math.max(calorieTarget - caloriesConsumed, 0)),
+    );
+    setRecords((current) => [toRecordSummary(result), ...current]);
+    setAiSuggestion((current) => ({ ...current, body: result.adjustment_suggestion }));
+  }
+
   return (
     <AppShell
       activeNav="home"
@@ -129,7 +191,10 @@ function App() {
                   </div>
                   <div className="record-row__meta">
                     <span>{record.time}</span>
-                    <strong>{record.calories > 0 ? "+" : ""}{record.calories} kcal</strong>
+                    <strong>
+                      {record.calories > 0 ? "+" : ""}
+                      {record.calories} kcal
+                    </strong>
                   </div>
                 </article>
               ))}
@@ -138,6 +203,7 @@ function App() {
         </div>
 
         <aside className="dashboard-preview__side" aria-label="AI 调整建议">
+          <QuickRecordComposer date={localDateString()} onRecorded={handleFoodRecorded} />
           <SectionCard
             title={aiSuggestion.title}
             subtitle="根据今天记录，给出更容易坚持的调整"

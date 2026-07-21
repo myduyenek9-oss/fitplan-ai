@@ -9,9 +9,9 @@
   --color-primary-strong: #0b2f27;
   --color-primary-soft: #dcebdd;
   --color-accent: #e48b4a;
-  --color-accent-strong: #b65f28;
+  --color-accent-strong: #9a4b1f;
   --color-text: #1f2b26;
-  --color-muted: #768078;
+  --color-muted: #5d685f;
   --color-border: #deded2;
   --color-danger: #b84b3e;
   --shadow-soft: 0 16px 40px rgba(18, 63, 52, 0.09);
@@ -21,4 +21,5 @@
   --content-width: 1240px;
   --sidebar-width: 248px;
   --mobile-nav-height: 76px;
+  --mobile-nav-gap: 12px;
 }

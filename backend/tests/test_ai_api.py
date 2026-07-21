@@ -250,3 +250,28 @@ def test_generate_plan_provider_error_returns_502_and_preserves_current_plan(aut
     assert current.status_code == 200
     assert current.json()["id"] == existing_id
     assert current.json()["is_active"] is True
+
+
+def test_chat_history_returns_saved_successful_messages_in_chronological_order(auth_client):
+    from app.api.ai import get_ai_client
+    from app.main import app
+
+    headers = _auth_headers(auth_client)
+    app.dependency_overrides[get_ai_client] = lambda: FakeAiClient(text_responses=["晚餐增加一份蔬菜即可。"])
+
+    response = auth_client.post(
+        "/api/ai/chat",
+        headers=headers,
+        json={"message": "下午加餐后晚餐怎么安排？", "today": "2026-07-20"},
+    )
+    assert response.status_code == 200
+
+    history = auth_client.get("/api/ai/history", headers=headers)
+    assert history.status_code == 200
+    body = history.json()
+    assert [message["role"] for message in body] == ["user", "assistant"]
+    assert [message["content"] for message in body] == ["下午加餐后晚餐怎么安排？", "晚餐增加一份蔬菜即可。"]
+
+
+def test_chat_history_requires_authentication(auth_client):
+    assert auth_client.get("/api/ai/history").status_code == 401

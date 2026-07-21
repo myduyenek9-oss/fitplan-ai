@@ -1,4 +1,5 @@
-﻿from datetime import date
+from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +16,15 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     conversation_id: int
+
+
+class ChatHistoryMessage(BaseModel):
+    id: int
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NaturalLanguageRecordRequest(BaseModel):

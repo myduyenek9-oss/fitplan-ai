@@ -6,7 +6,8 @@ from app.core.config import Settings, get_settings
 from app.models.plan import Plan
 from app.models.user import User
 from app.schemas.plan import PlanCreate, PlanGenerate, PlanSummary
-from app.services.ai_client import OpenAICompatibleClient
+from app.services.ai_client import AiProviderError, OpenAICompatibleClient
+from app.services.ai_context import build_bounded_ai_context_data
 from app.services.plan_service import AiPlanGenerator, DeterministicPlanGenerator, PlanGenerator, PlanService
 
 router = APIRouter(prefix="/api/plans", tags=["plans"])
@@ -42,12 +43,24 @@ def generate_plan(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PlanSummary:
-    plan = PlanService(generator=generator).generate_plan(
+    context = build_bounded_ai_context_data(
         db,
         user_id=current_user.id,
-        start_date=payload.start_date,
-        title=payload.title,
+        message="Generate a safe 7-day fitness and nutrition plan",
+        today=payload.start_date,
     )
+    try:
+        plan = PlanService(generator=generator).generate_plan(
+            db,
+            user_id=current_user.id,
+            start_date=payload.start_date,
+            title=payload.title,
+            context=context,
+        )
+    except AiProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="AI provider is unavailable"
+        ) from exc
     return _response(plan)
 
 

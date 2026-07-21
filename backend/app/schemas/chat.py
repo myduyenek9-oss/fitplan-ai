@@ -1,11 +1,13 @@
 ﻿from datetime import date
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.record import DailySummaryResponse, ExerciseLogResponse, FoodLogResponse
 
 
 class ChatRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     message: str = Field(min_length=1, max_length=2048)
     today: date | None = None
 
@@ -16,6 +18,8 @@ class ChatResponse(BaseModel):
 
 
 class NaturalLanguageRecordRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     text: str = Field(min_length=1, max_length=2048)
     today: date | None = None
 

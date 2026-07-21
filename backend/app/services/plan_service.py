@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import date, timedelta
+from typing import Any, Mapping
 import asyncio
 import json
 
@@ -18,12 +19,16 @@ from app.services.ai_schemas import PlanGenerationResult
 
 class PlanGenerator(ABC):
     @abstractmethod
-    def generate(self, *, start_date: date) -> list[PlanDaySchema]:
+    def generate(
+        self, *, start_date: date, context: Mapping[str, Any] | None = None
+    ) -> list[PlanDaySchema]:
         """Generate a validated seven-day plan starting on start_date."""
 
 
 class DeterministicPlanGenerator(PlanGenerator):
-    def generate(self, *, start_date: date) -> list[PlanDaySchema]:
+    def generate(
+        self, *, start_date: date, context: Mapping[str, Any] | None = None
+    ) -> list[PlanDaySchema]:
         days: list[PlanDaySchema] = []
         for offset in range(7):
             day_date = start_date + timedelta(days=offset)
@@ -59,7 +64,9 @@ class AiPlanGenerator(PlanGenerator):
     def __init__(self, *, ai_client: AiClient) -> None:
         self.ai_client = ai_client
 
-    def generate(self, *, start_date: date) -> list[PlanDaySchema]:
+    def generate(
+        self, *, start_date: date, context: Mapping[str, Any] | None = None
+    ) -> list[PlanDaySchema]:
         user_prompt = json.dumps(
             {
                 "start_date": start_date.isoformat(),
@@ -69,6 +76,7 @@ class AiPlanGenerator(PlanGenerator):
                     "balanced meals",
                     "safe workout or rest instructions",
                 ],
+                "context": context or {},
             },
             ensure_ascii=False,
         )
@@ -125,9 +133,17 @@ class PlanService:
             raise
         return self._load_plan(db, plan.id)
 
-    def generate_plan(self, db: Session, *, user_id: int, start_date: date, title: str = "7-day plan") -> Plan:
+    def generate_plan(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        start_date: date,
+        title: str = "7-day plan",
+        context: Mapping[str, Any] | None = None,
+    ) -> Plan:
         try:
-            generated_days = self.generator.generate(start_date=start_date)
+            generated_days = self.generator.generate(start_date=start_date, context=context)
             payload = PlanCreate(title=title, days=generated_days)
         except (ValidationError, TypeError, ValueError) as exc:
             raise PlanIntegrityError from exc

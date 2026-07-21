@@ -38,6 +38,27 @@ def test_ai_record_endpoints_require_authentication(auth_client):
     assert auth_client.post("/api/ai/chat", json={"message": "怎么调整"}).status_code == 401
 
 
+
+def test_natural_language_and_chat_endpoints_reject_blank_text(auth_client):
+    headers = _auth_headers(auth_client)
+
+    assert auth_client.post(
+        "/api/records/food/natural-language",
+        headers=headers,
+        json={"text": "   ", "today": "2026-07-20"},
+    ).status_code == 422
+    assert auth_client.post(
+        "/api/records/exercise/natural-language",
+        headers=headers,
+        json={"text": "   ", "today": "2026-07-20"},
+    ).status_code == 422
+    assert auth_client.post(
+        "/api/ai/chat",
+        headers=headers,
+        json={"message": "   ", "today": "2026-07-20"},
+    ).status_code == 422
+
+
 def test_food_natural_language_endpoint_creates_record_and_returns_summary(auth_client):
     from app.api.ai import get_ai_client
     from app.main import app
@@ -135,3 +156,97 @@ def test_ai_chat_uses_bounded_context_and_saves_conversation(auth_client):
     assert "AI_API_KEY" not in fake.text_calls[0]["user"]
     assert "password_hash" not in fake.text_calls[0]["user"]
     assert len(fake.text_calls[0]["user"]) < 5000
+
+
+
+class RecordingPlanGenerator:
+    def __init__(self):
+        self.context = None
+
+    def generate(self, *, start_date, context=None):
+        from app.schemas.plan import MealPlan, PlanDayCreate, WorkoutPlan
+        from datetime import timedelta
+
+        self.context = context
+        return [
+            PlanDayCreate(
+                date=start_date + timedelta(days=offset),
+                calorie_target=1900 + offset,
+                meals=[
+                    MealPlan(
+                        name=f"Context meal {offset + 1}",
+                        meal_type="lunch",
+                        calories=600,
+                        protein_g=35,
+                        carb_g=65,
+                        fat_g=18,
+                    )
+                ],
+                training_instruction=WorkoutPlan(
+                    kind="rest" if offset == 6 else "workout",
+                    title="Recovery" if offset == 6 else "Context workout",
+                    instructions="Rest" if offset == 6 else "Train moderately",
+                    duration_minutes=None if offset == 6 else 40,
+                ),
+            )
+            for offset in range(7)
+        ]
+
+
+class FailingPlanGenerator:
+    def generate(self, *, start_date, context=None):
+        raise AiProviderError("AI provider timed out")
+
+
+def test_generate_plan_passes_bounded_context_to_ai_generator(auth_client):
+    from app.api.plans import get_plan_generator
+    from app.main import app
+
+    headers = _auth_headers(auth_client)
+    generator = RecordingPlanGenerator()
+    app.dependency_overrides[get_plan_generator] = lambda: generator
+
+    response = auth_client.post(
+        "/api/plans/generate",
+        headers=headers,
+        json={"start_date": "2026-07-20", "title": "Context plan"},
+    )
+
+    assert response.status_code == 201
+    assert generator.context is not None
+    assert generator.context["today"] == "2026-07-20"
+    assert "profile" in generator.context
+    assert "current_plan" in generator.context
+    assert "daily_summary" in generator.context
+    assert "recent_messages" in generator.context
+    assert "AI_API_KEY" not in str(generator.context)
+    assert "password_hash" not in str(generator.context)
+
+
+def test_generate_plan_provider_error_returns_502_and_preserves_current_plan(auth_client):
+    from app.api.plans import get_plan_generator
+    from app.main import app
+
+    headers = _auth_headers(auth_client)
+    existing = auth_client.post(
+        "/api/plans/generate",
+        headers=headers,
+        json={"start_date": "2026-07-20", "title": "Existing"},
+    )
+    assert existing.status_code == 201
+    existing_id = existing.json()["id"]
+    app.dependency_overrides[get_plan_generator] = lambda: FailingPlanGenerator()
+
+    no_raise_client = TestClient(auth_client.app, raise_server_exceptions=False)
+    response = no_raise_client.post(
+        "/api/plans/generate",
+        headers=headers,
+        json={"start_date": "2026-07-27", "title": "Fails"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "AI provider is unavailable"
+    current = auth_client.get("/api/plans/current", headers=headers)
+    assert current.status_code == 200
+    assert current.json()["id"] == existing_id
+    assert current.json()["is_active"] is True

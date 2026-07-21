@@ -122,6 +122,42 @@ async def test_food_invalid_ai_result_keeps_audit_message_and_writes_no_record(d
 
 
 @pytest.mark.asyncio
+async def test_food_ai_result_rejects_blank_item_name_and_writes_no_record(db_session, user):
+    result = _food_ai_result()
+    result["items"][0]["name"] = "   "
+    service = AiRecordService(ai_client=FakeAiClient(json_responses=[result]))
+
+    with pytest.raises(AiRecordError, match="AI returned invalid food data"):
+        await service.create_food_from_text(
+            db_session,
+            user_id=user.id,
+            text="extra burger",
+            today=date(2026, 7, 20),
+        )
+
+    assert list(db_session.scalars(select(FoodLog))) == []
+    assert list(db_session.scalars(select(ConversationMessage)))[0].metadata_json["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_food_ai_result_rejects_unreasonable_calories_and_writes_no_record(db_session, user):
+    result = _food_ai_result()
+    result["items"][0]["calories"] = 1_000_000
+    service = AiRecordService(ai_client=FakeAiClient(json_responses=[result]))
+
+    with pytest.raises(AiRecordError, match="AI returned invalid food data"):
+        await service.create_food_from_text(
+            db_session,
+            user_id=user.id,
+            text="extra burger",
+            today=date(2026, 7, 20),
+        )
+
+    assert list(db_session.scalars(select(FoodLog))) == []
+    assert list(db_session.scalars(select(ConversationMessage)))[0].metadata_json["status"] == "failed"
+
+
+@pytest.mark.asyncio
 async def test_provider_error_writes_no_partial_food_log(db_session, user):
     service = AiRecordService(
         ai_client=FakeAiClient(json_error=AiProviderError("AI provider timed out"))
@@ -169,6 +205,36 @@ async def test_exercise_natural_language_creates_exercise_log_and_conversation(d
     assert len(list(db_session.scalars(select(ExerciseLog)))) == 1
     assert len(list(db_session.scalars(select(ConversationMessage)))) == 2
 
+@pytest.mark.asyncio
+async def test_exercise_ai_result_rejects_unreasonable_duration_and_writes_no_record(db_session, user):
+    service = AiRecordService(
+        ai_client=FakeAiClient(
+            json_responses=[
+                {
+                    "exercise_type": "running",
+                    "description": "run",
+                    "duration_minutes": 100_000,
+                    "calories_burned": 240,
+                    "logged_at": "2026-07-20T19:30:00+08:00",
+                    "confidence": 0.9,
+                    "adjustment_suggestion": "hydrate.",
+                }
+            ]
+        )
+    )
+
+    with pytest.raises(AiRecordError, match="AI returned invalid exercise data"):
+        await service.create_exercise_from_text(
+            db_session,
+            user_id=user.id,
+            text="ran 30 minutes",
+            today=date(2026, 7, 20),
+        )
+
+    assert list(db_session.scalars(select(ExerciseLog))) == []
+    assert list(db_session.scalars(select(ConversationMessage)))[0].metadata_json["status"] == "failed"
+
+
 
 
 
@@ -199,16 +265,24 @@ def _plan_ai_result():
                 },
             }
         )
-    return {"title": "AI plan", "days": days, "safety_note": "???????????"}
+    return {"title": "AI plan", "days": days, "safety_note": "safe balanced plan"}
 
 
-def test_ai_plan_generator_uses_same_json_client_and_validates_seven_days():
+def test_ai_plan_generator_uses_same_json_client_and_bounded_context():
     from app.services.plan_service import AiPlanGenerator
 
     fake = FakeAiClient(json_responses=[_plan_ai_result()])
     generator = AiPlanGenerator(ai_client=fake)
 
-    days = generator.generate(start_date=date(2026, 7, 20))
+    days = generator.generate(
+        start_date=date(2026, 7, 20),
+        context={
+            "profile": {"height_cm": 180},
+            "current_plan": {"title": "Current"},
+            "daily_summary": {"food_totals": {"calories": 880}},
+            "recent_messages": [{"role": "user", "content": "fat loss goal"}],
+        },
+    )
 
     assert len(days) == 7
     assert days[0].date == date(2026, 7, 20)
@@ -216,6 +290,9 @@ def test_ai_plan_generator_uses_same_json_client_and_validates_seven_days():
     assert days[6].training_instruction.kind == "rest"
     assert "JSON only" in fake.json_calls[0]["system"]
     assert "2026-07-20" in fake.json_calls[0]["user"]
+    assert "height_cm" in fake.json_calls[0]["user"]
+    assert "fat loss goal" in fake.json_calls[0]["user"]
+    assert "AI_API_KEY" not in fake.json_calls[0]["user"]
 
 
 

@@ -50,7 +50,7 @@ def _plan_payload(start: date, title="Manual plan"):
 
 
 class FakePlanGenerator(PlanGenerator):
-    def generate(self, *, start_date: date) -> list[PlanDayCreate]:
+    def generate(self, *, start_date: date, context=None) -> list[PlanDayCreate]:
         return [
             PlanDayCreate(
                 date=start_date + timedelta(days=offset),
@@ -250,7 +250,7 @@ def test_plan_conflict_is_mapped_to_409(monkeypatch, auth_client):
 
 
 class InvalidPlanGenerator(PlanGenerator):
-    def generate(self, *, start_date: date) -> list[PlanDayCreate]:
+    def generate(self, *, start_date: date, context=None) -> list[PlanDayCreate]:
         return []
 
 

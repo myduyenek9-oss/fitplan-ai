@@ -8,13 +8,14 @@ export type AppShellProps = {
   subtitle?: string;
   eyebrow?: string;
   activeNav?: NavKey;
+  onNavigate?: (key: NavKey) => void;
   children: ReactNode;
 };
 
-export function AppShell({ title, subtitle, eyebrow, activeNav, children }: AppShellProps) {
+export function AppShell({ title, subtitle, eyebrow, activeNav, onNavigate, children }: AppShellProps) {
   return (
     <div className="app-shell">
-      <SidebarNav activeKey={activeNav} />
+      <SidebarNav activeKey={activeNav} onNavigate={onNavigate} />
 
       <main className="app-shell__main">
         <div className="app-shell__content">
@@ -28,7 +29,7 @@ export function AppShell({ title, subtitle, eyebrow, activeNav, children }: AppS
         </div>
       </main>
 
-      <BottomNav activeKey={activeNav} />
+      <BottomNav activeKey={activeNav} onNavigate={onNavigate} />
     </div>
   );
 }

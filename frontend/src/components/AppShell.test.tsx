@@ -74,4 +74,23 @@ describe("AppShell", () => {
     expect(screen.getByText("核心内容")).toBeInTheDocument();
     expect(screen.getAllByRole("navigation", { name: "主导航" })).toHaveLength(2);
   });
+
+  it("forwards shell navigation selections from both responsive navs", async () => {
+    const user = userEvent.setup();
+    const handleNavigate = vi.fn();
+
+    render(
+      <AppShell title="导航联动" activeNav="home" onNavigate={handleNavigate}>
+        <section>核心内容</section>
+      </AppShell>,
+    );
+
+    const navigations = screen.getAllByRole("navigation", { name: "主导航" });
+
+    await user.click(within(navigations[0]).getByRole("button", { name: /计划/ }));
+    await user.click(within(navigations[1]).getByRole("button", { name: /AI 教练/ }));
+
+    expect(handleNavigate).toHaveBeenNthCalledWith(1, "plans");
+    expect(handleNavigate).toHaveBeenNthCalledWith(2, "coach");
+  });
 });

@@ -172,4 +172,29 @@ describe("editorial visual system styles", () => {
     expect(global).not.toContain(".editorial-button--secondary:hover");
     expect(global).not.toContain(".editorial-button--accent:hover");
   });
+  it("defines complete desktop sidebar descendant styles", () => {
+    const global = readSource("styles/global.css");
+
+    [
+      ".sidebar-nav__brand",
+      ".sidebar-nav__list",
+      ".sidebar-nav__list-item",
+      ".sidebar-nav__item",
+      ".sidebar-nav__item[aria-current=\"page\"]",
+      ".sidebar-nav__summary",
+      ".sidebar-nav__summary-label",
+      ".sidebar-nav__summary-copy",
+    ].forEach((selector) => {
+      expect(declarationBlock(global, selector), `${selector} block`).not.toBe("");
+    });
+
+    expect(declarationBlock(global, ".sidebar-nav__list")).toContain("list-style: none");
+    expect(declarationBlock(global, ".sidebar-nav__list")).toContain("padding: 0");
+    expect(declarationBlock(global, ".sidebar-nav__item")).toContain("display: inline-flex");
+    expect(declarationBlock(global, ".sidebar-nav__item")).toContain("align-items: center");
+    expect(declarationBlock(global, ".sidebar-nav__item[aria-current=\"page\"]")).toContain(
+      "var(--color-primary-soft)",
+    );
+    expect(declarationBlock(global, ".sidebar-nav__summary")).toContain("margin-top: auto");
+  });
 });

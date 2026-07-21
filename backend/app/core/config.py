@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     ai_model: str = ""
     dingtalk_webhook: str = ""
     dingtalk_secret: str = ""
+    dingtalk_daily_push_hour: int = Field(default=8, ge=0, le=23)
+    dingtalk_daily_push_minute: int = Field(default=0, ge=0, le=59)
     app_env: str = "development"
 
     model_config = SettingsConfigDict(

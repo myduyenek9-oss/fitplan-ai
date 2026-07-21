@@ -2,15 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.config import Settings, get_settings
 from app.models.plan import Plan
 from app.models.user import User
 from app.schemas.plan import PlanCreate, PlanGenerate, PlanSummary
-from app.services.plan_service import DeterministicPlanGenerator, PlanGenerator, PlanService
+from app.services.ai_client import OpenAICompatibleClient
+from app.services.plan_service import AiPlanGenerator, DeterministicPlanGenerator, PlanGenerator, PlanService
 
 router = APIRouter(prefix="/api/plans", tags=["plans"])
 
 
-def get_plan_generator() -> PlanGenerator:
+def get_plan_generator(settings: Settings = Depends(get_settings)) -> PlanGenerator:
+    if settings.ai_base_url and settings.ai_api_key and settings.ai_model:
+        return AiPlanGenerator(ai_client=OpenAICompatibleClient(settings=settings))
     return DeterministicPlanGenerator()
 
 

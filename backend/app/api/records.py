@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.ai import get_ai_client
 from app.api.deps import get_current_user, get_db
 from app.api.time_utils import (
     get_user_timezone,
@@ -15,6 +16,11 @@ from app.api.time_utils import (
 from app.models.goal import Goal
 from app.models.record import ExerciseLog, FoodLog
 from app.models.user import User
+from app.schemas.chat import (
+    NaturalLanguageExerciseRecordResponse,
+    NaturalLanguageFoodRecordResponse,
+    NaturalLanguageRecordRequest,
+)
 from app.schemas.record import (
     DailyGoalSnapshot,
     DailySummaryResponse,
@@ -27,6 +33,8 @@ from app.schemas.record import (
     FoodTotals,
     MacroCompletionPercentages,
 )
+from app.services.ai_client import AiClient
+from app.services.ai_record_service import AiRecordError, AiRecordService
 
 router = APIRouter(prefix="/api/records", tags=["records"])
 
@@ -107,6 +115,64 @@ def create_exercise_log(
     db.commit()
     db.refresh(record)
     return _exercise_log_response(record, user_timezone)
+
+
+
+
+@router.post(
+    "/food/natural-language",
+    response_model=NaturalLanguageFoodRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_food_log_from_natural_language(
+    payload: NaturalLanguageRecordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    ai_client: AiClient = Depends(get_ai_client),
+) -> NaturalLanguageFoodRecordResponse:
+    try:
+        result = await AiRecordService(ai_client=ai_client).create_food_from_text(
+            db,
+            user_id=current_user.id,
+            text=payload.text,
+            today=payload.today or date.today(),
+        )
+    except AiRecordError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return NaturalLanguageFoodRecordResponse(
+        record=result.record,
+        daily_summary=result.daily_summary,
+        adjustment_suggestion=result.adjustment_suggestion,
+        conversation_id=result.conversation_id,
+    )
+
+
+@router.post(
+    "/exercise/natural-language",
+    response_model=NaturalLanguageExerciseRecordResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_exercise_log_from_natural_language(
+    payload: NaturalLanguageRecordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    ai_client: AiClient = Depends(get_ai_client),
+) -> NaturalLanguageExerciseRecordResponse:
+    try:
+        result = await AiRecordService(ai_client=ai_client).create_exercise_from_text(
+            db,
+            user_id=current_user.id,
+            text=payload.text,
+            today=payload.today or date.today(),
+        )
+    except AiRecordError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    return NaturalLanguageExerciseRecordResponse(
+        record=result.record,
+        daily_summary=result.daily_summary,
+        adjustment_suggestion=result.adjustment_suggestion,
+        conversation_id=result.conversation_id,
+    )
 
 
 @router.get("/daily", response_model=DailySummaryResponse)

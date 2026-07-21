@@ -1,5 +1,7 @@
-from datetime import date, timedelta
 from abc import ABC, abstractmethod
+from datetime import date, timedelta
+import asyncio
+import json
 
 from pydantic import ValidationError
 from sqlalchemy import select, update
@@ -9,6 +11,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.errors import PlanConflictError, PlanIntegrityError
 from app.models.plan import Plan, PlanDay
 from app.schemas.plan import PlanCreate, PlanDay as PlanDaySchema
+from app.services.ai_client import AiClient
+from app.services.ai_prompts import PLAN_GENERATION_SYSTEM_PROMPT
+from app.services.ai_schemas import PlanGenerationResult
 
 
 class PlanGenerator(ABC):
@@ -46,6 +51,42 @@ class DeterministicPlanGenerator(PlanGenerator):
                 )
             )
         return days
+
+
+
+
+class AiPlanGenerator(PlanGenerator):
+    def __init__(self, *, ai_client: AiClient) -> None:
+        self.ai_client = ai_client
+
+    def generate(self, *, start_date: date) -> list[PlanDaySchema]:
+        user_prompt = json.dumps(
+            {
+                "start_date": start_date.isoformat(),
+                "days": 7,
+                "constraints": [
+                    "moderate calorie targets only",
+                    "balanced meals",
+                    "safe workout or rest instructions",
+                ],
+            },
+            ensure_ascii=False,
+        )
+        raw_result = _run_async_chat_json(
+            self.ai_client.chat_json(system=PLAN_GENERATION_SYSTEM_PROMPT, user=user_prompt)
+        )
+        parsed = PlanGenerationResult.model_validate(raw_result)
+        return parsed.days
+
+
+def _run_async_chat_json(awaitable):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(awaitable)
+    if loop.is_running():
+        raise RuntimeError("AiPlanGenerator cannot run inside an active event loop")
+    return loop.run_until_complete(awaitable)
 
 
 class PlanService:

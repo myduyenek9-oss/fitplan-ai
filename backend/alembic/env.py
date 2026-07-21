@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
 from app.db.base import Base
+from app.models.conversation import ConversationMessage  # noqa: F401 - register model metadata for migrations
 from app.models.goal import Goal  # noqa: F401 - register model metadata for migrations
 from app.models.plan import Plan, PlanDay  # noqa: F401 - register model metadata for migrations
 from app.models.profile import Profile  # noqa: F401 - register model metadata for migrations

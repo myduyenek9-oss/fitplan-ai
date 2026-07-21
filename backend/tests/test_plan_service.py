@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, select, text
@@ -184,7 +185,11 @@ def test_create_plan_conflict_rolls_back_and_preserves_previous_active_plan(monk
     )
 
     def fail_commit():
-        raise IntegrityError("active plan conflict", {}, Exception("unique"))
+        raise IntegrityError(
+            "active plan conflict",
+            {},
+            Exception("UNIQUE constraint failed: plans.user_id"),
+        )
 
     monkeypatch.setattr(db, "commit", fail_commit)
     with pytest.raises(PlanConflictError):
@@ -236,10 +241,80 @@ def test_activate_plan_conflict_rolls_back_and_preserves_current_active_plan(mon
     )
 
     def fail_commit():
-        raise IntegrityError("active plan conflict", {}, Exception("unique"))
+        raise IntegrityError(
+            "active plan conflict",
+            {},
+            Exception("UNIQUE constraint failed: plans.user_id"),
+        )
 
     monkeypatch.setattr(db, "commit", fail_commit)
     with pytest.raises(PlanConflictError):
+        service.activate_plan(db, user_id=user.id, plan_id=first.id)
+
+    monkeypatch.undo()
+    assert service.get_plan(db, user_id=user.id, plan_id=first.id).is_active is False
+    assert service.get_plan(db, user_id=user.id, plan_id=second.id).is_active is True
+
+def test_postgresql_active_plan_constraint_name_is_recognized():
+    original = SimpleNamespace(
+        diag=SimpleNamespace(constraint_name="uq_plans_one_active_per_user")
+    )
+    error = IntegrityError("duplicate key value", {}, original)
+
+    assert PlanService._is_active_plan_conflict(error) is True
+
+
+def test_create_plan_non_active_integrity_error_is_not_mapped_to_plan_conflict(monkeypatch):
+    db = _session()
+    user = _user(db)
+    service = PlanService(generator=DeterministicPlanGenerator())
+
+    service.create_plan(
+        db,
+        user_id=user.id,
+        payload=PlanCreate(title="First", days=_days(date(2026, 7, 20))),
+    )
+
+    def fail_commit():
+        raise IntegrityError(
+            "plan day conflict",
+            {},
+            Exception("UNIQUE constraint failed: plan_days.plan_id, plan_days.date"),
+        )
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+    with pytest.raises(IntegrityError):
+        service.create_plan(
+            db,
+            user_id=user.id,
+            payload=PlanCreate(title="Second", days=_days(date(2026, 7, 27))),
+        )
+
+
+def test_activate_plan_non_active_integrity_error_is_not_mapped_to_plan_conflict(monkeypatch):
+    db = _session()
+    user = _user(db)
+    service = PlanService(generator=DeterministicPlanGenerator())
+    first = service.create_plan(
+        db,
+        user_id=user.id,
+        payload=PlanCreate(title="First", days=_days(date(2026, 7, 20))),
+    )
+    second = service.create_plan(
+        db,
+        user_id=user.id,
+        payload=PlanCreate(title="Second", days=_days(date(2026, 7, 27))),
+    )
+
+    def fail_commit():
+        raise IntegrityError(
+            "plan day conflict",
+            {},
+            Exception("UNIQUE constraint failed: plan_days.plan_id, plan_days.date"),
+        )
+
+    monkeypatch.setattr(db, "commit", fail_commit)
+    with pytest.raises(IntegrityError):
         service.activate_plan(db, user_id=user.id, plan_id=first.id)
 
     monkeypatch.undo()

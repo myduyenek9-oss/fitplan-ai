@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from app.core.errors import PlanConflictError
@@ -192,6 +193,29 @@ def test_missing_plan_detail_and_activate_return_404(auth_client):
 
     assert auth_client.get("/api/plans/999999", headers=headers).status_code == 404
     assert auth_client.post("/api/plans/999999/activate", headers=headers).status_code == 404
+
+
+def test_damaged_plan_row_returns_controlled_500(monkeypatch, auth_client):
+    headers = _auth_headers(auth_client)
+
+    def load_damaged_plan(self, db, *, user_id, plan_id):
+        return SimpleNamespace(
+            id=plan_id,
+            user_id=user_id,
+            title="Damaged",
+            start_date=date(2026, 7, 20),
+            end_date=date(2026, 7, 26),
+            is_active=True,
+            days=[SimpleNamespace()],
+            created_at=datetime(2026, 7, 20),
+            updated_at=datetime(2026, 7, 20),
+        )
+
+    monkeypatch.setattr(PlanService, "get_plan", load_damaged_plan)
+    response = auth_client.get("/api/plans/1", headers=headers)
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Plan data is invalid"
 
 
 def test_repeated_activate_is_stable(auth_client):

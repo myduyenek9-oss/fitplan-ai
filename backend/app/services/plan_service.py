@@ -49,6 +49,9 @@ class DeterministicPlanGenerator(PlanGenerator):
 
 
 class PlanService:
+    _ACTIVE_PLAN_CONSTRAINT = "uq_plans_one_active_per_user"
+    _SQLITE_ACTIVE_PLAN_UNIQUE_MESSAGE = "unique constraint failed: plans.user_id"
+
     def __init__(self, generator: PlanGenerator | None = None) -> None:
         self.generator = generator or DeterministicPlanGenerator()
 
@@ -76,7 +79,9 @@ class PlanService:
             db.commit()
         except IntegrityError as exc:
             db.rollback()
-            raise PlanConflictError from exc
+            if self._is_active_plan_conflict(exc):
+                raise PlanConflictError from exc
+            raise
         return self._load_plan(db, plan.id)
 
     def generate_plan(self, db: Session, *, user_id: int, start_date: date, title: str = "7-day plan") -> Plan:
@@ -112,9 +117,27 @@ class PlanService:
             db.commit()
         except IntegrityError as exc:
             db.rollback()
-            raise PlanConflictError from exc
+            if self._is_active_plan_conflict(exc):
+                raise PlanConflictError from exc
+            raise
         return self._load_plan(db, plan.id)
 
+
+    @classmethod
+    def _is_active_plan_conflict(cls, exc: IntegrityError) -> bool:
+        orig = exc.orig
+        diagnostic = getattr(orig, "diag", None)
+        constraint_name = getattr(orig, "constraint_name", None) or getattr(
+            diagnostic, "constraint_name", None
+        )
+        if constraint_name == cls._ACTIVE_PLAN_CONSTRAINT:
+            return True
+
+        error_text = " ".join(str(value).lower() for value in (exc, orig))
+        return (
+            cls._ACTIVE_PLAN_CONSTRAINT.lower() in error_text
+            or cls._SQLITE_ACTIVE_PLAN_UNIQUE_MESSAGE in error_text
+        )
 
     @staticmethod
     def _validate_payload(payload: PlanCreate) -> PlanCreate:

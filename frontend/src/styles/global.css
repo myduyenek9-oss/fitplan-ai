@@ -203,10 +203,20 @@ svg {
     transform 160ms ease;
 }
 
-.editorial-button:hover {
+.editorial-button:not(:disabled):hover {
   background: var(--color-primary-strong);
   color: var(--color-surface);
   transform: translateY(-1px);
+}
+
+.editorial-button--accent {
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+
+.editorial-button--accent:not(:disabled):hover {
+  background: var(--color-accent-strong);
+  color: var(--color-surface);
 }
 
 .editorial-button--secondary {
@@ -216,7 +226,7 @@ svg {
   box-shadow: none;
 }
 
-.editorial-button--secondary:hover {
+.editorial-button--secondary:not(:disabled):hover {
   background: var(--color-surface-muted);
   color: var(--color-primary-strong);
 }

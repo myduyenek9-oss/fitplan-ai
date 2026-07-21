@@ -1,4 +1,4 @@
-﻿import { forwardRef } from "react";
+import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export type EditorialButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -18,6 +18,7 @@ export const EditorialButton = forwardRef<HTMLButtonElement, EditorialButtonProp
       className,
       disabled,
       children,
+      type,
       "aria-busy": ariaBusy,
       ...buttonProps
     },
@@ -33,6 +34,7 @@ export const EditorialButton = forwardRef<HTMLButtonElement, EditorialButtonProp
         ref={ref}
         className={classes}
         disabled={disabled || loading}
+        type={type ?? "button"}
         aria-busy={loading ? "true" : ariaBusy}
       >
         {icon ? <span aria-hidden="true">{icon}</span> : null}

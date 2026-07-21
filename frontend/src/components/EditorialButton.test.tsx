@@ -4,13 +4,20 @@ import { describe, expect, it, vi } from "vitest";
 import { EditorialButton } from "./EditorialButton";
 
 describe("EditorialButton", () => {
-  it("renders a primary button with an accessible name and editorial classes by default", () => {
+  it("renders a primary button with an accessible name, editorial classes, and safe button type by default", () => {
     render(<EditorialButton>生成计划</EditorialButton>);
 
     const button = screen.getByRole("button", { name: "生成计划" });
 
     expect(button).toHaveClass("editorial-button", "editorial-button--primary");
+    expect(button).toHaveAttribute("type", "button");
     expect(button).not.toBeDisabled();
+  });
+
+  it("preserves an explicit native button type", () => {
+    render(<EditorialButton type="submit">提交</EditorialButton>);
+
+    expect(screen.getByRole("button", { name: "提交" })).toHaveAttribute("type", "submit");
   });
 
   it("supports secondary and accent variants", () => {

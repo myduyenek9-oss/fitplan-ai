@@ -154,4 +154,22 @@ describe("editorial visual system styles", () => {
     expect(declarationBlock(global, ".bottom-nav")).toContain("var(--mobile-nav-gap)");
     expect(global).toMatch(/@media\s*\(min-width:\s*960px\)[\s\S]*\.bottom-nav\s*\{[^}]*display:\s*none;/);
   });
+
+  it("defines editorial button accent and hover states without applying hover styles to disabled buttons", () => {
+    const global = readSource("styles/global.css");
+
+    expect(declarationBlock(global, ".editorial-button--accent")).toContain("var(--color-accent)");
+    expect(declarationBlock(global, ".editorial-button--accent:not(:disabled):hover")).toContain(
+      "var(--color-accent-strong)",
+    );
+    expect(declarationBlock(global, ".editorial-button:not(:disabled):hover")).toContain(
+      "transform: translateY(-1px)",
+    );
+    expect(declarationBlock(global, ".editorial-button--secondary:not(:disabled):hover")).toContain(
+      "var(--color-surface-muted)",
+    );
+    expect(global).not.toContain(".editorial-button:hover");
+    expect(global).not.toContain(".editorial-button--secondary:hover");
+    expect(global).not.toContain(".editorial-button--accent:hover");
+  });
 });

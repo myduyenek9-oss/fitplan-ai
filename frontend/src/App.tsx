@@ -1,239 +1,98 @@
-﻿import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { EditorialButton } from "./components/EditorialButton";
 import { MetricCard } from "./components/MetricCard";
 import { SectionCard } from "./components/SectionCard";
 import { QuickRecordComposer } from "./features/dashboard/QuickRecordComposer";
-import type { NaturalLanguageFoodResult } from "./lib/fitplan-api";
-import { getAccessToken } from "./lib/api";
-import { OnboardingPage } from "./pages/OnboardingPage";
+import { ApiError, clearAccessToken, getAccessToken } from "./lib/api";
+import { getDailySummary, type DailySummary, type NaturalLanguageFoodResult } from "./lib/fitplan-api";
+import { getProfile } from "./lib/profile-api";
 import type { AiSuggestion, DailyPlanSummary, MetricSummary, RecordSummary } from "./lib/types";
+import { InitialSetupPage } from "./pages/InitialSetupPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
 
-const initialDailyPlan: DailyPlanSummary = {
-  goalLabel: "减脂 · 轻强度训练周",
-  calorieTarget: 1850,
-  caloriesConsumed: 1280,
-  exerciseTarget: "快走 30 分钟 + 上肢训练",
-  completionLabel: "今日完成 69%",
-};
-
-const metrics: MetricSummary[] = [
-  {
-    label: "蛋白质",
-    value: "92",
-    unit: "g",
-    detail: "距离目标还差 28g，晚餐优先鸡胸/鱼虾。",
-    tone: "green",
-  },
-  {
-    label: "饮水",
-    value: "1.6",
-    unit: "L",
-    detail: "下午再补 800ml，训练前小口喝。",
-    tone: "cream",
-  },
-  {
-    label: "活动消耗",
-    value: "410",
-    unit: "kcal",
-    detail: "快走完成后预计再增加 160 kcal。",
-    tone: "orange",
-  },
+const initialDailyPlan: DailyPlanSummary = { goalLabel: "正在同步你的健康目标", calorieTarget: 0, caloriesConsumed: 0, exerciseTarget: "完成基础设置后，AI 会为你安排训练节奏", completionLabel: "等待今日记录" };
+const initialMetrics: MetricSummary[] = [
+  { label: "蛋白质", value: "0", unit: "g", detail: "同步目标后显示今日完成度。", tone: "green" },
+  { label: "碳水", value: "0", unit: "g", detail: "同步目标后显示今日完成度。", tone: "cream" },
+  { label: "活动消耗", value: "0", unit: "kcal", detail: "记录运动后会自动汇总。", tone: "orange" },
 ];
+const initialAiSuggestion: AiSuggestion = { title: "AI 今日建议", body: "先记录你的第一餐或一次训练。每一次真实记录，都会让接下来的建议更贴合你。", actionLabel: "和 AI 调整计划" };
 
-const initialRecords: RecordSummary[] = [
-  {
-    id: "breakfast",
-    category: "food",
-    title: "早餐 · 燕麦酸奶碗",
-    detail: "燕麦 45g、希腊酸奶、蓝莓和少量坚果",
-    calories: 420,
-    time: "08:20",
-  },
-  {
-    id: "lunch",
-    category: "food",
-    title: "午餐 · 鸡胸能量盘",
-    detail: "糙米饭、鸡胸肉、彩椒和西兰花",
-    calories: 620,
-    time: "12:35",
-  },
-  {
-    id: "walk",
-    category: "exercise",
-    title: "运动 · 午后快走",
-    detail: "中等配速 22 分钟，心率稳定",
-    calories: -180,
-    time: "15:10",
-  },
-];
-
-const initialAiSuggestion: AiSuggestion = {
-  title: "AI 晚餐建议",
-  body: "如果晚餐想吃得满足，可以选择番茄牛肉汤 + 半份杂粮饭 + 一盘绿叶菜，控制油脂的同时把蛋白质补够。",
-  actionLabel: "让 AI 重新细化",
-};
-
-function localDateString(date = new Date()): string {
-  const timezoneOffsetMs = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
+function localDateString(date = new Date()): string { const offset = date.getTimezoneOffset() * 60_000; return new Date(date.getTime() - offset).toISOString().slice(0, 10); }
+function formatTime(value: string): string { return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)); }
+function mealLabel(mealType: string | null): string { const labels: Record<string, string> = { breakfast: "早餐", lunch: "午餐", dinner: "晚餐", snack: "加餐" }; return mealType ? (labels[mealType] ?? "饮食") : "饮食"; }
+function toRecordSummary(result: NaturalLanguageFoodResult): RecordSummary { const { record } = result; return { id: "food-" + record.id, category: "food", title: mealLabel(record.meal_type) + " · AI 补记", detail: record.original_text, calories: Math.round(record.calories), time: formatTime(record.logged_at) }; }
+function recordsFromSummary(summary: DailySummary): RecordSummary[] {
+  const food = summary.food_records.map((record) => ({ id: "food-" + record.id, category: "food" as const, title: mealLabel(record.meal_type) + " · " + record.original_text, detail: "蛋白 " + Math.round(record.protein_g) + "g · 碳水 " + Math.round(record.carb_g) + "g · 脂肪 " + Math.round(record.fat_g) + "g", calories: Math.round(record.calories), time: formatTime(record.logged_at) }));
+  const exercise = summary.exercise_records.map((record) => ({ id: "exercise-" + record.id, category: "exercise" as const, title: "运动 · " + record.exercise_type, detail: record.description ?? Math.round(record.duration_minutes) + " 分钟运动记录", calories: -Math.round(record.calories_burned), time: formatTime(record.logged_at) }));
+  return [...food, ...exercise].sort((left, right) => right.time.localeCompare(left.time));
+}
+function metricsFromSummary(summary: DailySummary): MetricSummary[] {
+  const { food_totals: food, exercise_totals: exercise, goal } = summary;
+  const proteinRemaining = Math.max(0, Math.round((goal?.protein_g ?? 0) - food.protein_g));
+  const carbRemaining = Math.max(0, Math.round((goal?.carb_g ?? 0) - food.carb_g));
+  return [
+    { label: "蛋白质", value: String(Math.round(food.protein_g)), unit: "g", detail: goal ? "距离目标还差 " + proteinRemaining + "g。" : "完成目标设置后会显示建议。", tone: "green" },
+    { label: "碳水", value: String(Math.round(food.carb_g)), unit: "g", detail: goal ? "距离目标还差 " + carbRemaining + "g。" : "完成目标设置后会显示建议。", tone: "cream" },
+    { label: "活动消耗", value: String(Math.round(exercise.calories_burned)), unit: "kcal", detail: exercise.duration_minutes > 0 ? "今天已运动 " + Math.round(exercise.duration_minutes) + " 分钟。" : "记录运动后会自动汇总。", tone: "orange" },
+  ];
 }
 
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
-}
-
-function mealLabel(mealType: string | null): string {
-  const labels: Record<string, string> = {
-    breakfast: "早餐",
-    lunch: "午餐",
-    dinner: "晚餐",
-    snack: "加餐",
-  };
-  return mealType ? (labels[mealType] ?? "饮食") : "饮食";
-}
-
-function toRecordSummary(result: NaturalLanguageFoodResult): RecordSummary {
-  const { record } = result;
-  return {
-    id: `food-${record.id}`,
-    category: "food",
-    title: `${mealLabel(record.meal_type)} · AI 补记`,
-    detail: record.original_text,
-    calories: Math.round(record.calories),
-    time: formatTime(record.logged_at),
-  };
-}
-
-export function DashboardPreview() {
+export type DashboardPreviewProps = { onNeedSetup?: () => void };
+export function DashboardPreview({ onNeedSetup }: DashboardPreviewProps) {
   const [dailyPlan, setDailyPlan] = useState(initialDailyPlan);
-  const [remainingCalories, setRemainingCalories] = useState(
-    initialDailyPlan.calorieTarget - initialDailyPlan.caloriesConsumed,
-  );
-  const [records, setRecords] = useState(initialRecords);
+  const [remainingCalories, setRemainingCalories] = useState(0);
+  const [metrics, setMetrics] = useState(initialMetrics);
+  const [records, setRecords] = useState<RecordSummary[]>([]);
   const [aiSuggestion, setAiSuggestion] = useState(initialAiSuggestion);
+  const [hasGoal, setHasGoal] = useState<boolean | null>(null);
+  const [dailyError, setDailyError] = useState<string | null>(null);
 
-  function handleFoodRecorded(result: NaturalLanguageFoodResult) {
-    const { daily_summary: summary } = result;
-    const calorieTarget = summary.goal?.daily_calories ?? dailyPlan.calorieTarget;
+  function applyDailySummary(summary: DailySummary, adjustmentSuggestion?: string) {
+    const calorieTarget = Math.round(summary.goal?.daily_calories ?? 0);
     const caloriesConsumed = Math.round(summary.food_totals.calories);
     const completion = calorieTarget > 0 ? Math.round((caloriesConsumed / calorieTarget) * 100) : 0;
-
-    setDailyPlan((current) => ({
-      ...current,
-      calorieTarget,
-      caloriesConsumed,
-      completionLabel: `今日完成 ${completion}%`,
-    }));
-    setRemainingCalories(
-      Math.round(summary.remaining_calories ?? Math.max(calorieTarget - caloriesConsumed, 0)),
-    );
-    setRecords((current) => [toRecordSummary(result), ...current]);
-    setAiSuggestion((current) => ({ ...current, body: result.adjustment_suggestion }));
+    setHasGoal(Boolean(summary.goal));
+    setDailyPlan({ goalLabel: summary.goal ? "每日目标 · " + calorieTarget + " kcal" : "还没有设置每日目标", calorieTarget, caloriesConsumed, exerciseTarget: summary.exercise_totals.duration_minutes > 0 ? "今天已完成 " + Math.round(summary.exercise_totals.duration_minutes) + " 分钟运动" : "今天安排一段你愿意开始的轻运动", completionLabel: calorieTarget > 0 ? "今日完成 " + completion + "%" : "等待设置目标" });
+    setRemainingCalories(Math.round(summary.remaining_calories ?? 0));
+    setMetrics(metricsFromSummary(summary));
+    setRecords(recordsFromSummary(summary));
+    if (adjustmentSuggestion) setAiSuggestion((current) => ({ ...current, body: adjustmentSuggestion }));
   }
 
-  return (
-    <AppShell
-      activeNav="home"
-      eyebrow="今日 · 轻盈记录"
-      subtitle={dailyPlan.goalLabel}
-      title="今天离目标更近一点"
-    >
-      <div className="dashboard-preview">
-        <div className="dashboard-preview__main">
-          <section className="daily-hero" aria-label="今日计划概览">
-            <div className="daily-hero__copy">
-              <p className="daily-hero__label">今日计划</p>
-              <p className="daily-hero__calories">{dailyPlan.calorieTarget} kcal</p>
-              <p className="daily-hero__target">{dailyPlan.exerciseTarget}</p>
-            </div>
+  useEffect(() => {
+    let isCurrent = true;
+    void getDailySummary(localDateString()).then((summary) => { if (isCurrent) { applyDailySummary(summary); setDailyError(null); } }).catch((error: unknown) => { if (isCurrent) setDailyError(error instanceof Error ? error.message : "无法同步今日记录，请稍后重试。"); });
+    return () => { isCurrent = false; };
+  }, []);
 
-            <div className="daily-hero__stats" aria-label="热量进度">
-              <div>
-                <span>已摄入</span>
-                <strong>{dailyPlan.caloriesConsumed}</strong>
-              </div>
-              <div>
-                <span>剩余</span>
-                <strong>{remainingCalories}</strong>
-              </div>
-              <div>
-                <span>状态</span>
-                <strong>{dailyPlan.completionLabel}</strong>
-              </div>
-            </div>
+  function handleFoodRecorded(result: NaturalLanguageFoodResult) { applyDailySummary(result.daily_summary, result.adjustment_suggestion); setRecords((current) => current.length > 0 ? current : [toRecordSummary(result)]); }
 
-            <div className="quick-actions" aria-label="快捷操作">
-              <EditorialButton variant="accent">记录饮食</EditorialButton>
-              <EditorialButton variant="secondary">记录运动</EditorialButton>
-              <EditorialButton>和 AI 调整计划</EditorialButton>
-            </div>
-          </section>
+  if (hasGoal === false) return <AppShell activeNav="settings" eyebrow="开始前的一小步" subtitle="先建立每日热量和营养素目标" title="让计划从你的真实数据开始"><section className="dashboard-setup-prompt"><span aria-hidden="true">✦</span><p>还没有找到你的每日目标。填写体重、活动水平和健身方向后，FitPlan AI 才能正确计算每餐余量与训练消耗。</p><EditorialButton variant="accent" onClick={onNeedSetup}>设置我的目标</EditorialButton></section></AppShell>;
 
-          <div className="metric-card-grid" aria-label="核心指标">
-            {metrics.map((metric) => (
-              <MetricCard key={metric.label} {...metric} />
-            ))}
-          </div>
-
-          <SectionCard title="今日计划的记录" subtitle="饮食和运动会自动汇总到每日热量里">
-            <div className="record-list">
-              {records.map((record) => (
-                <article className="record-row" key={record.id}>
-                  <div className={`record-row__icon record-row__icon--${record.category}`} aria-hidden="true">
-                    {record.category === "food" ? "🍽" : "🏃"}
-                  </div>
-                  <div className="record-row__content">
-                    <h3>{record.title}</h3>
-                    <p>{record.detail}</p>
-                  </div>
-                  <div className="record-row__meta">
-                    <span>{record.time}</span>
-                    <strong>
-                      {record.calories > 0 ? "+" : ""}
-                      {record.calories} kcal
-                    </strong>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </SectionCard>
-        </div>
-
-        <aside className="dashboard-preview__side" aria-label="AI 调整建议">
-          <QuickRecordComposer date={localDateString()} onRecorded={handleFoodRecorded} />
-          <SectionCard
-            title={aiSuggestion.title}
-            subtitle="根据今天记录，给出更容易坚持的调整"
-            action={<EditorialButton variant="secondary">{aiSuggestion.actionLabel}</EditorialButton>}
-          >
-            <div className="ai-suggestion">
-              <p>{aiSuggestion.body}</p>
-              <div className="ai-suggestion__chips" aria-label="推荐重点">
-                <span>高蛋白</span>
-                <span>低油脂</span>
-                <span>饱腹感</span>
-              </div>
-            </div>
-          </SectionCard>
-        </aside>
-      </div>
-    </AppShell>
-  );
+  return <AppShell activeNav="home" eyebrow="今日 · 轻盈记录" subtitle={dailyPlan.goalLabel} title="今天离目标更近一点">
+    <div className="dashboard-preview"><div className="dashboard-preview__main">
+      {dailyError ? <p className="dashboard-preview__error" role="alert">{dailyError}</p> : null}
+      <section className="daily-hero" aria-label="今日计划概览"><div className="daily-hero__copy"><p className="daily-hero__label">今日计划</p><p className="daily-hero__calories">{dailyPlan.calorieTarget} kcal</p><p className="daily-hero__target">{dailyPlan.exerciseTarget}</p></div><div className="daily-hero__stats" aria-label="热量进度"><div><span>已摄入</span><strong>{dailyPlan.caloriesConsumed}</strong></div><div><span>剩余</span><strong>{remainingCalories}</strong></div><div><span>状态</span><strong>{dailyPlan.completionLabel}</strong></div></div><div className="quick-actions" aria-label="快捷操作"><EditorialButton variant="accent">记录饮食</EditorialButton><EditorialButton variant="secondary">记录运动</EditorialButton><EditorialButton>和 AI 调整计划</EditorialButton></div></section>
+      <div className="metric-card-grid" aria-label="核心指标">{metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}</div>
+      <SectionCard title="今日计划的记录" subtitle="饮食和运动会自动汇总到每日热量里">{records.length > 0 ? <div className="record-list">{records.map((record) => <article className="record-row" key={record.id}><div className={"record-row__icon record-row__icon--" + record.category} aria-hidden="true">{record.category === "food" ? "🍽" : "🏃"}</div><div className="record-row__content"><h3>{record.title}</h3><p>{record.detail}</p></div><div className="record-row__meta"><span>{record.time}</span><strong>{record.calories > 0 ? "+" : ""}{record.calories} kcal</strong></div></article>)}</div> : <p className="dashboard-empty-records">今天还没有记录。从右侧告诉 AI 你吃了什么，或完成一条运动记录。</p>}</SectionCard>
+    </div><aside className="dashboard-preview__side" aria-label="AI 调整建议"><QuickRecordComposer date={localDateString()} onRecorded={handleFoodRecorded} /><SectionCard title={aiSuggestion.title} subtitle="根据今天记录，给出更容易坚持的调整" action={<EditorialButton variant="secondary">{aiSuggestion.actionLabel}</EditorialButton>}><div className="ai-suggestion"><p>{aiSuggestion.body}</p><div className="ai-suggestion__chips" aria-label="推荐重点"><span>高蛋白</span><span>低油脂</span><span>饱腹感</span></div></div></SectionCard></aside></div>
+  </AppShell>;
 }
 
+type AppScreen = "auth" | "checking" | "setup" | "dashboard";
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(getAccessToken()));
-
-  if (!isAuthenticated) {
-    return <OnboardingPage onAuthenticated={() => setIsAuthenticated(true)} />;
-  }
-
-  return <DashboardPreview />;
+  const [screen, setScreen] = useState<AppScreen>(() => getAccessToken() ? "checking" : "auth");
+  useEffect(() => {
+    if (screen !== "checking") return;
+    let isCurrent = true;
+    void getProfile().then(() => { if (isCurrent) setScreen("dashboard"); }).catch((error: unknown) => { if (!isCurrent) return; if (error instanceof ApiError && error.status === 404) { setScreen("setup"); return; } clearAccessToken(); setScreen("auth"); });
+    return () => { isCurrent = false; };
+  }, [screen]);
+  if (screen === "auth") return <OnboardingPage onAuthenticated={() => setScreen("checking")} />;
+  if (screen === "checking") return <main className="app-loading" aria-live="polite">正在打开你的健康档案…</main>;
+  if (screen === "setup") return <InitialSetupPage onCompleted={() => setScreen("dashboard")} />;
+  return <DashboardPreview onNeedSetup={() => setScreen("setup")} />;
 }
-
 export default App;

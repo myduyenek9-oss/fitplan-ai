@@ -1,0 +1,24 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --color-bg: #f6f1e8;
+  --color-surface: #fffdf8;
+  --color-surface-muted: #edf3e6;
+  --color-surface-warm: #fff0dd;
+  --color-primary: #123f34;
+  --color-primary-strong: #0b2f27;
+  --color-primary-soft: #dcebdd;
+  --color-accent: #e48b4a;
+  --color-accent-strong: #b65f28;
+  --color-text: #1f2b26;
+  --color-muted: #768078;
+  --color-border: #deded2;
+  --color-danger: #b84b3e;
+  --shadow-soft: 0 16px 40px rgba(18, 63, 52, 0.09);
+  --shadow-button: 0 8px 20px rgba(18, 63, 52, 0.14);
+  --radius-card: 28px;
+  --radius-control: 999px;
+  --content-width: 1240px;
+  --sidebar-width: 248px;
+  --mobile-nav-height: 76px;
+}

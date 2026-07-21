@@ -122,6 +122,24 @@ async def test_food_invalid_ai_result_keeps_audit_message_and_writes_no_record(d
 
 
 @pytest.mark.asyncio
+async def test_food_ai_result_rejects_blank_optional_meal_type_and_writes_no_record(db_session, user):
+    result = _food_ai_result()
+    result["meal_type"] = "   "
+    service = AiRecordService(ai_client=FakeAiClient(json_responses=[result]))
+
+    with pytest.raises(AiRecordError, match="AI returned invalid food data"):
+        await service.create_food_from_text(
+            db_session,
+            user_id=user.id,
+            text="extra burger",
+            today=date(2026, 7, 20),
+        )
+
+    assert list(db_session.scalars(select(FoodLog))) == []
+    assert list(db_session.scalars(select(ConversationMessage)))[0].metadata_json["status"] == "failed"
+
+
+@pytest.mark.asyncio
 async def test_food_ai_result_rejects_blank_item_name_and_writes_no_record(db_session, user):
     result = _food_ai_result()
     result["items"][0]["name"] = "   "
@@ -204,6 +222,36 @@ async def test_exercise_natural_language_creates_exercise_log_and_conversation(d
     assert result.daily_summary.exercise_totals.calories_burned == 240
     assert len(list(db_session.scalars(select(ExerciseLog)))) == 1
     assert len(list(db_session.scalars(select(ConversationMessage)))) == 2
+
+@pytest.mark.asyncio
+async def test_exercise_ai_result_rejects_blank_optional_description_and_writes_no_record(db_session, user):
+    service = AiRecordService(
+        ai_client=FakeAiClient(
+            json_responses=[
+                {
+                    "exercise_type": "running",
+                    "description": "   ",
+                    "duration_minutes": 30,
+                    "calories_burned": 240,
+                    "logged_at": "2026-07-20T19:30:00+08:00",
+                    "confidence": 0.9,
+                    "adjustment_suggestion": "hydrate.",
+                }
+            ]
+        )
+    )
+
+    with pytest.raises(AiRecordError, match="AI returned invalid exercise data"):
+        await service.create_exercise_from_text(
+            db_session,
+            user_id=user.id,
+            text="ran 30 minutes",
+            today=date(2026, 7, 20),
+        )
+
+    assert list(db_session.scalars(select(ExerciseLog))) == []
+    assert list(db_session.scalars(select(ConversationMessage)))[0].metadata_json["status"] == "failed"
+
 
 @pytest.mark.asyncio
 async def test_exercise_ai_result_rejects_unreasonable_duration_and_writes_no_record(db_session, user):

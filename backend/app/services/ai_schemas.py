@@ -29,7 +29,7 @@ class ParsedFoodItem(BaseModel):
 class ParsedFoodResult(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    meal_type: str | None = Field(default=None, max_length=32)
+    meal_type: str | None = Field(default=None, min_length=1, max_length=32)
     logged_at: datetime
     confidence: FiniteFloat = Field(ge=0, le=1)
     items: list[ParsedFoodItem] = Field(min_length=1)
@@ -73,7 +73,7 @@ class ParsedExerciseResult(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     exercise_type: str = Field(min_length=1, max_length=128)
-    description: str | None = Field(default=None, max_length=1024)
+    description: str | None = Field(default=None, min_length=1, max_length=1024)
     duration_minutes: FiniteFloat = Field(gt=0, le=MAX_EXERCISE_DURATION_MINUTES)
     calories_burned: FiniteFloat = Field(gt=0, le=MAX_EXERCISE_CALORIES_BURNED)
     logged_at: datetime

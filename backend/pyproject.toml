@@ -17,6 +17,7 @@ dependencies = [
     "apscheduler>=3.10,<4.0",
     "psycopg[binary]>=3.2,<4.0",
     "argon2-cffi>=23.1,<26.0",
+    "cryptography>=43,<46",
 ]
 
 [project.optional-dependencies]

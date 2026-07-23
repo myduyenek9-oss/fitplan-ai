@@ -64,6 +64,7 @@ class ExerciseLog(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    original_text: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     exercise_type: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     duration_minutes: Mapped[float] = mapped_column(Float(), nullable=False)

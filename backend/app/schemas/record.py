@@ -52,6 +52,8 @@ class FoodLogResponse(BaseModel):
     protein_g: float
     carb_g: float
     fat_g: float
+    calories_min: float | None = None
+    calories_max: float | None = None
     status: FoodStatus
     logged_at: datetime
     created_at: datetime
@@ -61,6 +63,7 @@ class FoodLogResponse(BaseModel):
 
 
 class ExerciseLogCreate(BaseModel):
+    original_text: str | None = Field(default=None, max_length=2048)
     exercise_type: str = Field(min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=1024)
     duration_minutes: float = Field(gt=0)
@@ -73,8 +76,24 @@ class ExerciseLogCreate(BaseModel):
         return ensure_timezone_aware(value)
 
 
+class ExerciseLogUpdate(BaseModel):
+    original_text: str | None = Field(default=None, max_length=2048)
+    exercise_type: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=1024)
+    duration_minutes: float | None = Field(default=None, gt=0)
+    calories_burned: float | None = Field(default=None, gt=0)
+    logged_at: datetime | None = None
+
+    @field_validator("logged_at")
+    @classmethod
+    def validate_logged_at(cls, value: datetime | None) -> datetime | None:
+        return ensure_timezone_aware(value) if value is not None else None
+
+
 class ExerciseLogResponse(ExerciseLogCreate):
     id: int
+    calories_burned_min: float | None = None
+    calories_burned_max: float | None = None
     user_id: int
     created_at: datetime
     updated_at: datetime
@@ -92,6 +111,12 @@ class FoodTotals(BaseModel):
 class ExerciseTotals(BaseModel):
     calories_burned: float
     duration_minutes: float
+
+
+class CalorieCalculation(BaseModel):
+    formula: str
+    exercise_included_fully: bool
+    explanation: str
 
 
 class MacroCompletionPercentages(BaseModel):
@@ -113,6 +138,7 @@ class DailySummaryResponse(BaseModel):
     food_totals: FoodTotals
     exercise_totals: ExerciseTotals
     remaining_calories: float | None
+    calorie_calculation: CalorieCalculation
     macro_completion_percentages: MacroCompletionPercentages
     food_status_counts: dict[FoodStatus, int]
     food_records: list[FoodLogResponse] = Field(default_factory=list)

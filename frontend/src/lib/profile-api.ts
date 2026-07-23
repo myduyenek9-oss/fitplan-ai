@@ -54,6 +54,13 @@ export type BodyMetricInput = {
   logged_at: string;
 };
 
+export type BodyMetric = BodyMetricInput & {
+  id: number;
+  user_id: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CaloriePreviewInput = {
   age: number;
   sex: CalorieSex;
@@ -83,6 +90,10 @@ export function upsertProfile(payload: ProfileInput): Promise<Profile> {
   });
 }
 
+export function getActiveGoal(): Promise<Goal> {
+  return request<Goal>("/api/profile/goal");
+}
+
 export function upsertGoal(payload: GoalInput): Promise<Goal> {
   return request<Goal>("/api/profile/goal", {
     method: "PUT",
@@ -90,11 +101,15 @@ export function upsertGoal(payload: GoalInput): Promise<Goal> {
   });
 }
 
-export function createBodyMetric(payload: BodyMetricInput): Promise<BodyMetricInput & { id: number }> {
-  return request<BodyMetricInput & { id: number }>("/api/body-metrics", {
+export function createBodyMetric(payload: BodyMetricInput): Promise<BodyMetric> {
+  return request<BodyMetric>("/api/body-metrics", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function listBodyMetrics(): Promise<BodyMetric[]> {
+  return request<BodyMetric[]>("/api/body-metrics");
 }
 
 export function previewCalorieTargets(payload: CaloriePreviewInput): Promise<CalorieTargets> {
@@ -102,4 +117,47 @@ export function previewCalorieTargets(payload: CaloriePreviewInput): Promise<Cal
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export type DingTalkNotification = {
+  is_configured: boolean;
+  is_enabled: boolean;
+  webhook_hint: string | null;
+  has_signing_secret: boolean;
+  keyword: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type DingTalkNotificationInput = {
+  webhook: string;
+  secret?: string | null;
+  keyword?: string | null;
+  is_enabled: boolean;
+};
+
+export function getDingTalkNotification(): Promise<DingTalkNotification> {
+  return request<DingTalkNotification>("/api/notifications/dingtalk");
+}
+
+export function upsertDingTalkNotification(payload: DingTalkNotificationInput): Promise<DingTalkNotification> {
+  return request<DingTalkNotification>("/api/notifications/dingtalk", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function setDingTalkNotificationEnabled(isEnabled: boolean): Promise<DingTalkNotification> {
+  return request<DingTalkNotification>("/api/notifications/dingtalk/status", {
+    method: "PATCH",
+    body: JSON.stringify({ is_enabled: isEnabled }),
+  });
+}
+
+export function deleteDingTalkNotification(): Promise<void> {
+  return request<void>("/api/notifications/dingtalk", { method: "DELETE" });
+}
+
+export function sendDingTalkTestPush(): Promise<{ delivered: boolean }> {
+  return request<{ delivered: boolean }>("/api/notifications/dingtalk/test", { method: "POST" });
 }

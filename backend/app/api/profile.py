@@ -112,6 +112,22 @@ def upsert_profile(
     return _profile_response(profile)
 
 
+@router.get("/api/profile/goal", response_model=GoalResponse)
+def get_active_goal(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> GoalResponse:
+    active_goal = db.scalar(
+        select(Goal)
+        .where(Goal.user_id == current_user.id, Goal.is_active.is_(True))
+        .order_by(Goal.updated_at.desc(), Goal.id.desc())
+        .limit(1)
+    )
+    if active_goal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active goal not found")
+    return _goal_response(active_goal, get_user_timezone(db, current_user.id))
+
+
 @router.put("/api/profile/goal", response_model=GoalResponse)
 def upsert_active_goal(
     payload: GoalUpsert,

@@ -117,70 +117,19 @@ Copy `infra/.env.example` to `.env` for local environment configuration when nee
 - 可配置 OpenAI 兼容的中转 API（AI_BASE_URL、AI_API_KEY、AI_MODEL）。
 - 可选的钉钉群机器人每日计划推送，按中国标准时间（Asia/Shanghai）运行。
 
-## Docker 与阿里云 ECS 部署
+## Docker 与阿里云 ECS / 1Panel 部署
 
-仓库提供了 PostgreSQL、后端、前端 Nginx 反向代理的一键容器编排：
+仓库提供 PostgreSQL、FastAPI 后端、React 前端 Nginx 的 Docker Compose 编排：
 
-- backend/Dockerfile：启动前自动执行 Alembic 数据库迁移。
-- frontend/Dockerfile：构建 React 静态站点并由 Nginx 提供服务。
-- infra/docker-compose.yml：应用、数据库和持久化卷。
-- infra/nginx.conf：前端路由回退，并将 /api/ 与 /health 代理到后端。
+- `backend/Dockerfile`：启动前自动执行 Alembic 数据库迁移。
+- `frontend/Dockerfile`：构建 React 静态站点并由 Nginx 提供服务。
+- `infra/docker-compose.yml`：应用、数据库和持久化卷。
+- `infra/nginx.conf`：前端路由回退，并将 `/api/` 与 `/health` 代理到后端。
 
-### 1. 准备 ECS
+为了避免与服务器上已有网站争抢 80/443，生产 Compose 默认只监听服务器本机的 `127.0.0.1:18081`，再由 1Panel/OpenResty 反向代理。PostgreSQL 和后端 API 不直接暴露到公网。
 
-建议使用 Ubuntu 22.04/24.04 的阿里云 ECS，安装 Docker Engine 与 Docker Compose Plugin；在安全组中至少放通 TCP 80，如配置域名和 HTTPS 再放通 TCP 443。不要将 PostgreSQL 的 5432 端口直接暴露到公网。
+完整的 1Panel 图形化部署、域名/独立端口配置、生产环境变量、Git 自动部署、备份与回滚步骤见：
 
-    sudo apt update
-    sudo apt install -y ca-certificates curl git
-    # 按 Docker 官方文档安装 Docker Engine 与 docker-compose-plugin
-    sudo usermod -aG docker $USER
+- [`docs/1panel-deploy.md`](docs/1panel-deploy.md)
 
-重新登录后拉取项目并创建生产环境变量文件：
-
-    git clone <your-repository-url> fitplan-ai
-    cd fitplan-ai
-    cp infra/.env.example infra/.env
-    chmod 600 infra/.env
-
-编辑 infra/.env，至少填写：
-
-    JWT_SECRET=<使用 openssl rand -hex 32 生成的随机值>
-    POSTGRES_PASSWORD=<高强度数据库密码>
-    AI_BASE_URL=<你的 OpenAI 兼容中转站地址>
-    AI_API_KEY=<中转站 API Key>
-    AI_MODEL=<模型名称>
-
-AI 相关值可以暂时留空，但 AI 对话、计划生成及自然语言解析会返回“尚未配置”的提示。密码若包含 URL 特殊字符，建议使用仅含字母、数字、下划线和短横线的强密码，避免 PostgreSQL 连接 URL 解析问题。
-
-### 2. 启动与检查
-
-    cd infra
-    docker compose up -d --build
-    docker compose ps
-    curl http://127.0.0.1/health
-
-浏览器访问 http://<ECS 公网 IP>/ 即可使用。查看日志：
-
-    docker compose logs -f backend
-    docker compose logs -f web
-
-升级版本时，在项目根目录拉取代码后重新构建：
-
-    git pull
-    cd infra
-    docker compose up -d --build
-
-数据库数据保存在 Docker volume postgres_data 中；不要在有数据的生产环境执行 docker compose down -v。
-
-### 3. 配置钉钉每日计划提醒（可选）
-
-1. 在钉钉群里添加“自定义机器人”，复制 Webhook 到 DINGTALK_WEBHOOK。
-2. 如果机器人安全设置启用了“加签”，将钉钉生成的密钥写入 DINGTALK_SECRET；未启用加签时留空即可。
-3. 设置 DINGTALK_DAILY_PUSH_HOUR 和 DINGTALK_DAILY_PUSH_MINUTE，默认每天 08:00（Asia/Shanghai）。
-4. 重启后端：docker compose up -d --force-recreate backend。
-
-推送内容包含当日热量目标、当前可用热量、当天饮食安排和训练提示。若未配置 Webhook，调度器不会启动，也不会影响应用正常运行。
-
-### 4. 域名与 HTTPS（建议）
-
-生产环境建议通过阿里云 DNS 将域名 A 记录指向 ECS 公网 IP，并在 Nginx 或阿里云负载均衡上配置 HTTPS 证书。当前容器内置 Nginx 仅监听 80 端口；可以在 ECS 前置 Caddy、Nginx 或负载均衡来终止 TLS，再转发到本应用的 80 端口。
+生产环境不要提交 `infra/.env`，也不要对有数据的环境执行 `docker compose down -v`。

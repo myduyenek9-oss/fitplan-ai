@@ -2,6 +2,12 @@ import { request } from "./api";
 
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack" | null;
 
+export interface PlanFood {
+  name: string;
+  amount: string;
+  notes: string | null;
+}
+
 export interface PlanMeal {
   name: string;
   meal_type: MealType;
@@ -9,6 +15,15 @@ export interface PlanMeal {
   protein_g: number;
   carb_g: number;
   fat_g: number;
+  foods: PlanFood[];
+}
+
+export interface PlanWorkoutExercise {
+  name: string;
+  sets: number;
+  reps: string;
+  rest_seconds: number;
+  notes: string | null;
 }
 
 export interface PlanWorkout {
@@ -16,6 +31,11 @@ export interface PlanWorkout {
   title: string;
   instructions: string;
   duration_minutes: number | null;
+  split: string | null;
+  focus: string | null;
+  warmup: string | null;
+  exercises: PlanWorkoutExercise[];
+  cooldown: string | null;
 }
 
 export interface PlanDay {
@@ -46,4 +66,8 @@ export function generatePlan(startDate: string, title = "我的 7 天饮食训�
     method: "POST",
     body: JSON.stringify({ start_date: startDate, title }),
   });
+}
+
+export function postponePlanDay(planId: number, day: string): Promise<FitnessPlan> {
+  return request<FitnessPlan>(`/api/plans/${planId}/days/${day}/postpone`, { method: "POST" });
 }

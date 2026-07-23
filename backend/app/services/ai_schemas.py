@@ -86,6 +86,21 @@ class ParsedExerciseResult(BaseModel):
         return ensure_timezone_aware(value)
 
 
+class ParsedMixedFoodResult(ParsedFoodResult):
+    description: str = Field(min_length=1, max_length=1024)
+
+
+class ParsedMixedRecordResult(BaseModel):
+    diet: ParsedMixedFoodResult | None = None
+    exercise: ParsedExerciseResult | None = None
+
+    @model_validator(mode="after")
+    def validate_at_least_one_record(self) -> "ParsedMixedRecordResult":
+        if self.diet is None and self.exercise is None:
+            raise ValueError("mixed record result must contain diet or exercise")
+        return self
+
+
 class PlanGenerationResult(BaseModel):
     title: str | None = Field(default=None, max_length=256)
     days: list[PlanDayCreate]

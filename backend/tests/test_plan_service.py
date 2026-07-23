@@ -320,3 +320,48 @@ def test_activate_plan_non_active_integrity_error_is_not_mapped_to_plan_conflict
     monkeypatch.undo()
     assert service.get_plan(db, user_id=user.id, plan_id=first.id).is_active is False
     assert service.get_plan(db, user_id=user.id, plan_id=second.id).is_active is True
+
+
+def test_deterministic_generator_creates_detailed_four_session_week():
+    days = DeterministicPlanGenerator().generate(start_date=date(2026, 7, 20))
+
+    assert len(days) == 7
+    assert all(len(day.meals) == 4 for day in days)
+    assert all(len(meal.foods) >= 3 for day in days for meal in day.meals)
+    workouts = [day.training_instruction for day in days if day.training_instruction.kind == "workout"]
+    assert len(workouts) == 4
+    assert all(len(workout.exercises) >= 5 for workout in workouts)
+    assert len({workout.title for workout in workouts}) == 4
+
+
+def test_postpone_training_shifts_sessions_to_next_recovery_day():
+    db = _session()
+    user = _user(db)
+    service = PlanService(generator=DeterministicPlanGenerator())
+    plan = service.generate_plan(db, user_id=user.id, start_date=date(2026, 7, 20))
+    before = [day.training_instruction.title for day in plan.days]
+
+    updated = service.postpone_training(
+        db, user_id=user.id, plan_id=plan.id, day=date(2026, 7, 20)
+    )
+
+    assert updated is not None
+    after = [day.training_instruction.title for day in updated.days]
+    postponed_day = updated.days[0].training_instruction
+    assert postponed_day.kind == "rest"
+    assert "?" not in postponed_day.title
+    assert "?" not in postponed_day.instructions
+    assert "?" not in (postponed_day.split or "")
+    assert after[1] == before[0]
+    assert after[2] == before[1]
+
+
+def test_postpone_training_rejects_rest_day_and_missing_plan():
+    db = _session()
+    user = _user(db)
+    service = PlanService(generator=DeterministicPlanGenerator())
+    plan = service.generate_plan(db, user_id=user.id, start_date=date(2026, 7, 20))
+
+    with pytest.raises(ValueError, match="only workout days"):
+        service.postpone_training(db, user_id=user.id, plan_id=plan.id, day=date(2026, 7, 22))
+    assert service.postpone_training(db, user_id=user.id, plan_id=999, day=date(2026, 7, 20)) is None

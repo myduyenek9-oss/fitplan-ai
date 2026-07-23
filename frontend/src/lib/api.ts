@@ -121,16 +121,31 @@ function formatDetail(detail: unknown): string | undefined {
   return undefined;
 }
 
+const localizedBackendMessages: Record<string, string> = {
+  "AI provider is not configured": "AI 服务尚未配置完整，请检查 AI_BASE_URL、AI_API_KEY 和 AI_MODEL。",
+  "AI provider timed out": "AI 服务响应超时，请稍后再试。",
+  "AI provider request failed": "AI 服务请求失败，请检查 API 地址、模型名称和密钥权限。",
+  "AI provider access denied": "\u5f53\u524d API Key \u6ca1\u6709\u4f7f\u7528\u8fd9\u4e2a\u6a21\u578b\u6216\u5206\u7ec4\u7684\u6743\u9650\uff0c\u8bf7\u5728\u4e2d\u8f6c\u7ad9\u6388\u6743\u540e\u91cd\u8bd5\u3002",
+  "AI provider is unavailable": "暂时无法连接 AI 服务，请检查 API 地址后重试。",
+  "AI provider returned invalid JSON": "AI 服务返回的数据格式不正确，请稍后再试。",
+  "AI provider returned an unexpected response": "AI 服务返回了无法识别的结果，请稍后再试。",
+  "AI provider returned an empty response": "AI 服务暂未返回内容，请稍后再试。",
+};
+
+export function localizeBackendMessage(message: string): string {
+  return localizedBackendMessages[message] ?? message;
+}
+
 function getErrorMessage(payload: unknown, status: number): string {
   if (isRecord(payload) && "detail" in payload) {
     const formattedDetail = formatDetail(payload.detail);
 
     if (formattedDetail) {
-      return formattedDetail;
+      return localizeBackendMessage(formattedDetail);
     }
   }
 
-  return `Request failed with status ${status}`;
+  return `请求失败（状态码 ${status}）`;
 }
 
 function shouldSetJsonContentType(body: BodyInit | null | undefined): boolean {

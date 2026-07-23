@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 
-def test_single_account_setup_can_only_initialize_once(auth_client):
+def test_setup_creates_multiple_accounts_and_rejects_duplicate_usernames(auth_client):
     first_response = auth_client.post(
         "/api/auth/setup",
         json={"username": "owner", "password": "correct horse battery staple"},
@@ -21,8 +21,15 @@ def test_single_account_setup_can_only_initialize_once(auth_client):
         "/api/auth/setup",
         json={"username": "second", "password": "another secure password"},
     )
-    assert second_response.status_code == 409
+    assert second_response.status_code == 201
+    assert second_response.json()["id"] == 2
+    assert second_response.json()["username"] == "second"
 
+    duplicate_response = auth_client.post(
+        "/api/auth/setup",
+        json={"username": "owner", "password": "another secure password"},
+    )
+    assert duplicate_response.status_code == 409
 
 def test_setup_trims_and_normalizes_username(auth_client):
     response = auth_client.post(
@@ -144,9 +151,12 @@ def test_decode_access_token_rejects_non_strict_base64url_segments(auth_client):
 
 
 def test_jwt_secret_must_be_configured_for_auth_operations(monkeypatch):
-    from app.core.config import get_settings
+    from app.core.config import Settings, get_settings
     from app.core.security import create_access_token
 
+    # This test validates absent environment configuration, so it must not inherit
+    # the repository's developer-only .env file.
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
     for value in [None, "replace-with-a-long-random-secret", "short-secret"]:
         monkeypatch.setenv("APP_ENV", "development")
         if value is None:
@@ -167,17 +177,19 @@ def test_settings_cache_clear_applies_environment_overrides(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///first.db")
     monkeypatch.setenv("JWT_SECRET", "first-secret-with-at-least-32-characters")
     get_settings.cache_clear()
-    assert get_settings().database_url == "sqlite+pysqlite:///first.db"
+    assert get_settings().database_url.endswith("first.db")
+    assert "fitplan-ai" in get_settings().database_url
 
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///second.db")
     monkeypatch.setenv("JWT_SECRET", "second-secret-with-at-least-32-characters")
     get_settings.cache_clear()
-    assert get_settings().database_url == "sqlite+pysqlite:///second.db"
+    assert get_settings().database_url.endswith("second.db")
+    assert "fitplan-ai" in get_settings().database_url
 
     get_settings.cache_clear()
 
 
-def test_user_table_enforces_singleton_user_at_database_layer():
+def test_user_table_allows_multiple_distinct_accounts():
     from app.db.base import Base
     from app.models.user import User
 
@@ -189,9 +201,13 @@ def test_user_table_enforces_singleton_user_at_database_layer():
     Base.metadata.create_all(bind=engine)
 
     with Session(engine) as session:
-        session.add(User(id=1, username="owner", password_hash="hash-one"))
+        session.add_all([
+            User(id=1, username="owner", password_hash="hash-one"),
+            User(id=2, username="member", password_hash="hash-two"),
+        ])
         session.commit()
-        session.add(User(id=2, username="intruder", password_hash="hash-two"))
+
+        session.add(User(id=3, username="owner", password_hash="hash-three"))
         with pytest.raises(IntegrityError):
             session.commit()
 

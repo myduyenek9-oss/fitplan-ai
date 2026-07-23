@@ -97,3 +97,20 @@ def test_scripts_prefer_pnpm_and_validate_vite_node_version():
     assert "20.19" in verify_script and "22.12" in verify_script
     assert "20.19" in dev_script and "22.12" in dev_script
     assert "-NoProfile" in dev_script
+
+
+def test_relative_sqlite_database_url_is_resolved_from_repository_root():
+    from app.core.config import PROJECT_ROOT, resolve_database_url
+
+    resolved_url = resolve_database_url("sqlite+pysqlite:///./fitplan-local.db")
+
+    assert resolved_url.endswith("fitplan-local.db")
+    assert str(PROJECT_ROOT) in resolved_url
+
+
+def test_non_sqlite_database_url_is_not_changed():
+    from app.core.config import resolve_database_url
+
+    database_url = "postgresql+psycopg://fitplan:fitplan@localhost:5432/fitplan_ai"
+
+    assert resolve_database_url(database_url) == database_url

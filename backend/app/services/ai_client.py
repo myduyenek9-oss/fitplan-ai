@@ -11,6 +11,10 @@ from app.core.config import Settings, get_settings
 class AiProviderError(RuntimeError):
     """Raised when the configured AI provider cannot return usable output."""
 
+    def __init__(self, message: str, *, response_format_unsupported: bool = False) -> None:
+        super().__init__(message)
+        self.response_format_unsupported = response_format_unsupported
+
 
 class AiClient(Protocol):
     async def chat_json(self, *, system: str, user: str) -> dict[str, Any]: ...
@@ -31,7 +35,15 @@ class OpenAICompatibleClient:
         self.transport = transport
 
     async def chat_json(self, *, system: str, user: str) -> dict[str, Any]:
-        content = await self._chat(system=system, user=user, response_format={"type": "json_object"})
+        try:
+            content = await self._chat(system=system, user=user, response_format={"type": "json_object"})
+        except AiProviderError as exc:
+            # Some OpenAI-compatible providers reject response_format even though
+            # they support the regular chat completions endpoint. Retry without
+            # that optional parameter; the system prompt still requires JSON.
+            if not exc.response_format_unsupported:
+                raise
+            content = await self._chat(system=system, user=user, response_format=None)
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError as exc:
@@ -72,7 +84,14 @@ class OpenAICompatibleClient:
         except httpx.TimeoutException as exc:
             raise AiProviderError("AI provider timed out") from exc
         except httpx.HTTPStatusError as exc:
-            raise AiProviderError("AI provider request failed") from exc
+            if exc.response.status_code in {401, 403}:
+                raise AiProviderError("AI provider access denied") from exc
+            raise AiProviderError(
+                "AI provider request failed",
+                response_format_unsupported=(
+                    response_format is not None and exc.response.status_code in {400, 404, 405, 415, 422}
+                ),
+            ) from exc
         except httpx.RequestError as exc:
             raise AiProviderError("AI provider is unavailable") from exc
 

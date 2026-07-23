@@ -18,6 +18,7 @@ export interface DailyPlanSummary {
   goalLabel: string;
   calorieTarget: number;
   caloriesConsumed: number;
+  exerciseCaloriesBurned: number;
   exerciseTarget: string;
   completionLabel: string;
 }
@@ -29,6 +30,7 @@ export interface RecordSummary {
   detail: string;
   calories: number;
   time: string;
+  timestamp?: number;
 }
 
 export interface AiSuggestion {

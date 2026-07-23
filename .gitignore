@@ -1,4 +1,4 @@
-.superpowers/
+﻿.superpowers/
 .env
 .env.*
 !.env.example
@@ -13,3 +13,7 @@ dist/
 coverage/
 *.tsbuildinfo
 fitplan-local.db
+.runtime/
+inspect.txt
+inspect2.txt
+review.txt

@@ -36,6 +36,7 @@ def _save_goal(client, headers):
 def test_record_endpoints_require_authentication(auth_client):
     assert auth_client.post("/api/records/food", json={}).status_code == 401
     assert auth_client.post("/api/records/exercise", json={}).status_code == 401
+    assert auth_client.post("/api/records/exercise/1/undo").status_code == 401
     assert auth_client.get("/api/records/daily?date=2026-07-20").status_code == 401
 
 
@@ -192,6 +193,64 @@ def test_patch_delete_and_undo_food_records_are_reflected_in_daily_summary(auth_
     }
     assert summary["food_status_counts"] == {"active": 1, "deleted": 1, "undone": 1}
     assert summary["remaining_calories"] == 1550.0
+
+
+def test_undo_exercise_record_recalculates_summary_and_protects_ownership(auth_client):
+    owner_headers = _auth_headers(auth_client)
+    _save_goal(auth_client, owner_headers)
+    exercise = auth_client.post(
+        "/api/records/exercise",
+        headers=owner_headers,
+        json={
+            "exercise_type": "strength training",
+            "description": "temporary test record",
+            "duration_minutes": 45,
+            "calories_burned": 240,
+            "logged_at": "2026-07-20T18:00:00Z",
+        },
+    ).json()
+
+    setup_other = auth_client.post(
+        "/api/auth/setup",
+        json={"username": "other-user", "password": PASSWORD},
+    )
+    assert setup_other.status_code == 201
+    other_login = auth_client.post(
+        "/api/auth/login",
+        json={"username": "other-user", "password": PASSWORD},
+    )
+    other_headers = {"Authorization": f"Bearer {other_login.json()['access_token']}"}
+
+    forbidden_undo = auth_client.post(
+        f"/api/records/exercise/{exercise['id']}/undo",
+        headers=other_headers,
+    )
+    assert forbidden_undo.status_code == 404
+
+    before_undo = auth_client.get(
+        "/api/records/daily?date=2026-07-20", headers=owner_headers
+    ).json()
+    assert before_undo["exercise_totals"] == {
+        "calories_burned": 240.0,
+        "duration_minutes": 45.0,
+    }
+    assert len(before_undo["exercise_records"]) == 1
+
+    undo_response = auth_client.post(
+        f"/api/records/exercise/{exercise['id']}/undo",
+        headers=owner_headers,
+    )
+    assert undo_response.status_code == 204
+
+    after_undo = auth_client.get(
+        "/api/records/daily?date=2026-07-20", headers=owner_headers
+    ).json()
+    assert after_undo["exercise_totals"] == {
+        "calories_burned": 0.0,
+        "duration_minutes": 0.0,
+    }
+    assert after_undo["exercise_records"] == []
+    assert after_undo["remaining_calories"] == 2000.0
 
 
 def test_daily_summary_without_goal_uses_null_goal_and_remaining_calories(auth_client):
@@ -467,3 +526,39 @@ def test_daily_summary_includes_active_food_and_exercise_records(auth_client):
     assert [record["id"] for record in summary["exercise_records"]] == [exercise_response.json()["id"]]
     assert summary["food_records"][0]["original_text"] == "Greek yogurt and banana"
     assert summary["exercise_records"][0]["exercise_type"] == "walking"
+
+
+def test_daily_summary_returns_food_and_exercise_records_newest_first(auth_client):
+    headers = _auth_headers(auth_client)
+    for hour, name in [(9, "早餐"), (19, "晚餐")]:
+        response = auth_client.post(
+            "/api/records/food",
+            headers=headers,
+            json={
+                "original_text": name,
+                "parsed_content": {},
+                "meal_type": "breakfast" if hour == 9 else "dinner",
+                "calories": 300,
+                "protein_g": 20,
+                "carb_g": 30,
+                "fat_g": 10,
+                "logged_at": f"2026-07-22T{hour:02d}:00:00+08:00",
+            },
+        )
+        assert response.status_code == 201
+    for hour, name in [(16, "快走"), (20, "力量训练")]:
+        response = auth_client.post(
+            "/api/records/exercise",
+            headers=headers,
+            json={
+                "exercise_type": name,
+                "duration_minutes": 30,
+                "calories_burned": 180,
+                "logged_at": f"2026-07-22T{hour:02d}:00:00+08:00",
+            },
+        )
+        assert response.status_code == 201
+
+    summary = auth_client.get("/api/records/daily?date=2026-07-22", headers=headers).json()
+    assert [item["original_text"] for item in summary["food_records"]] == ["晚餐", "早餐"]
+    assert [item["exercise_type"] for item in summary["exercise_records"]] == ["力量训练", "快走"]

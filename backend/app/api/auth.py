@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -12,15 +12,9 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/setup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def setup_single_user(payload: AuthSetupRequest, db: Session = Depends(get_db)) -> User:
-    existing_user = db.scalar(select(User).limit(1))
-    if existing_user is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A user has already been initialized",
-        )
-
-    user = User(id=1, username=payload.username, password_hash=hash_password(payload.password))
+def setup_account(payload: AuthSetupRequest, db: Session = Depends(get_db)) -> User:
+    next_user_id = (db.scalar(select(func.max(User.id))) or 0) + 1
+    user = User(id=next_user_id, username=payload.username, password_hash=hash_password(payload.password))
     db.add(user)
     try:
         db.commit()
@@ -28,7 +22,7 @@ def setup_single_user(payload: AuthSetupRequest, db: Session = Depends(get_db)) 
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A user has already been initialized",
+            detail="Username already registered",
         ) from exc
     db.refresh(user)
     return user

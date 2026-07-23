@@ -195,6 +195,17 @@ def test_authenticated_user_can_save_and_update_active_goal(auth_client):
     assert updated["target_weight_kg"] is None
     assert updated["is_active"] is True
 
+    get_response = auth_client.get("/api/profile/goal", headers=headers)
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == created["id"]
+    assert get_response.json()["goal_type"] == "maintenance"
+
+
+def test_get_active_goal_returns_not_found_without_a_goal(auth_client):
+    response = auth_client.get("/api/profile/goal", headers=_auth_headers(auth_client))
+
+    assert response.status_code == 404
+
 
 @pytest.mark.parametrize(
     "payload",

@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -15,7 +17,7 @@ router = APIRouter(prefix="/api/plans", tags=["plans"])
 
 def get_plan_generator(settings: Settings = Depends(get_settings)) -> PlanGenerator:
     if settings.ai_base_url and settings.ai_api_key and settings.ai_model:
-        return AiPlanGenerator(ai_client=OpenAICompatibleClient(settings=settings))
+        return AiPlanGenerator(ai_client=OpenAICompatibleClient(settings=settings, timeout_seconds=10.0))
     return DeterministicPlanGenerator()
 
 
@@ -70,6 +72,22 @@ def get_current_plan(
     db: Session = Depends(get_db),
 ) -> PlanSummary:
     plan = PlanService().get_current_plan(db, user_id=current_user.id)
+    if plan is None:
+        raise _not_found()
+    return _response(plan)
+
+
+@router.post("/{plan_id}/days/{day}/postpone", response_model=PlanSummary)
+def postpone_plan_day(
+    plan_id: int,
+    day: date,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PlanSummary:
+    try:
+        plan = PlanService().postpone_training(db, user_id=current_user.id, plan_id=plan_id, day=day)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if plan is None:
         raise _not_found()
     return _response(plan)

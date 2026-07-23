@@ -82,9 +82,9 @@ describe("editorial visual system styles", () => {
       "--mobile-nav-gap",
     ].forEach((name) => expect(vars[name], `${name} token`).toBeDefined());
 
-    expect(vars["--color-bg"]).toBe("#f6f1e8");
-    expect(vars["--color-surface"]).toBe("#fffdf8");
-    expect(vars["--color-primary"]).toBe("#123f34");
+    expect(vars["--color-bg"]).toBe("#f4f8f5");
+    expect(vars["--color-surface"]).toBe("#ffffff");
+    expect(vars["--color-primary"]).toBe("#176b49");
     expect(vars["--mobile-nav-height"]).toBe("76px");
   });
 

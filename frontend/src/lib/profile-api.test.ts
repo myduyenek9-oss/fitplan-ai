@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { previewCalorieTargets, upsertGoal, upsertProfile } from "./profile-api";
+import { getActiveGoal, listBodyMetrics, previewCalorieTargets, upsertGoal, upsertProfile } from "./profile-api";
 
 function response(payload: unknown) { return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } }); }
 
@@ -11,6 +11,17 @@ describe("profile and goal API", () => {
     await expect(previewCalorieTargets({ age: 30, sex: "female", weight_kg: 58, height_cm: 165, activity_level: "moderate", goal: "fat_loss" })).resolves.toEqual({ daily_calories: 1850 });
     expect(fetchMock).toHaveBeenCalledWith("/api/calorie/preview", expect.objectContaining({ method: "POST", body: expect.stringContaining('"age":30') }));
   });
+  it("reads the saved active goal and latest body metrics", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ id: 4, goal_type: "fat_loss" }))
+      .mockResolvedValueOnce(response([{ id: 8, weight_kg: 58.5 }]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getActiveGoal()).resolves.toMatchObject({ id: 4, goal_type: "fat_loss" });
+    await expect(listBodyMetrics()).resolves.toMatchObject([{ id: 8, weight_kg: 58.5 }]);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(["/api/profile/goal", "/api/body-metrics"]);
+  });
+
   it("saves profile and calculated goal through protected endpoints", async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response({ id: 1 })));
     vi.stubGlobal("fetch", fetchMock);

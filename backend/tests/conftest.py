@@ -7,8 +7,10 @@ from sqlalchemy.pool import StaticPool
 
 @pytest.fixture
 def auth_client(monkeypatch):
-    from app.core.config import get_settings
+    from app.core.config import Settings, get_settings
 
+    # Test configuration must not inherit developer credentials from the root .env file.
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("JWT_SECRET", "test-only-secret-with-at-least-32-characters")
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")

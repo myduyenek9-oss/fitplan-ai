@@ -61,6 +61,7 @@ describe("AppShell", () => {
       <AppShell
         eyebrow="今日概览"
         title="营养计划"
+        titleIcon
         subtitle="记录饮食、训练和 AI 建议。"
         activeNav="home"
       >
@@ -69,6 +70,7 @@ describe("AppShell", () => {
     );
 
     expect(screen.getByRole("heading", { name: "营养计划", level: 1 })).toBeInTheDocument();
+    expect(document.querySelector(".page-header__title-row .heading-icon")).toHaveTextContent("✦");
     expect(screen.getByText("今日概览")).toHaveClass("page-header__eyebrow");
     expect(screen.getByText("记录饮食、训练和 AI 建议。")).toHaveClass("page-header__subtitle");
     expect(screen.getByText("核心内容")).toBeInTheDocument();

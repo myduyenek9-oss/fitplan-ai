@@ -1,4 +1,5 @@
-﻿from datetime import date
+from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
@@ -9,8 +10,36 @@ from app.models.conversation import ConversationMessage
 from app.models.record import ExerciseLog, FoodLog
 from app.models.user import User
 from app.services.ai_client import AiProviderError
-from app.services.ai_record_service import AiRecordError, AiRecordService
+from app.services.ai_record_service import AiRecordError, AiRecordService, _resolve_recorded_at
 from tests.fakes import FakeAiClient
+
+
+def test_record_time_uses_exact_submission_minute_when_text_has_no_clock_time():
+    timezone = ZoneInfo("Asia/Shanghai")
+    resolved = _resolve_recorded_at(
+        text="just ate a banana",
+        parsed_logged_at=datetime(2026, 7, 22, 19, 0, tzinfo=timezone),
+        day=date(2026, 7, 22),
+        user_timezone=timezone,
+        now=datetime(2026, 7, 22, 19, 58, 42, tzinfo=timezone),
+    )
+
+    assert resolved == datetime(2026, 7, 22, 11, 58, 42, tzinfo=UTC)
+
+
+def test_record_time_keeps_explicit_hour_and_minute_from_text():
+    timezone = ZoneInfo("Asia/Shanghai")
+    parsed_time = datetime(2026, 7, 22, 8, 35, tzinfo=timezone)
+
+    resolved = _resolve_recorded_at(
+        text="ate breakfast at 8:35",
+        parsed_logged_at=parsed_time,
+        day=date(2026, 7, 22),
+        user_timezone=timezone,
+        now=datetime(2026, 7, 22, 19, 58, 42, tzinfo=timezone),
+    )
+
+    assert resolved == datetime(2026, 7, 22, 0, 35, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -98,6 +127,64 @@ async def test_food_natural_language_creates_single_log_with_items_and_conversat
     assert messages[0].source == "food_natural_language"
     assert messages[0].content == "刚才吃了一个鸡腿堡和一杯奶茶"
     assert messages[1].metadata_json["record_id"] == result.record.id
+
+
+@pytest.mark.asyncio
+async def test_food_quick_record_splits_completed_diet_and_exercise(db_session, user):
+    ai_client = FakeAiClient(
+        json_responses=[
+            {
+                "diet": {
+                    "description": "刚刚吃了两个烧烤",
+                    "meal_type": "snack",
+                    "logged_at": "2026-07-22T20:00:00+08:00",
+                    "confidence": 0.78,
+                    "items": [
+                        {
+                            "name": "烧烤串",
+                            "quantity": "2串",
+                            "calories": 200,
+                            "protein_g": 12,
+                            "carb_g": 10,
+                            "fat_g": 12,
+                        }
+                    ],
+                    "adjustment_suggestion": "后续注意补水。",
+                },
+                "exercise": {
+                    "exercise_type": "慢跑",
+                    "description": "慢跑了十分钟",
+                    "duration_minutes": 10,
+                    "calories_burned": 75,
+                    "logged_at": "2026-07-22T20:00:00+08:00",
+                    "confidence": 0.8,
+                    "adjustment_suggestion": "属于短时轻中等强度有氧。",
+                },
+            }
+        ]
+    )
+    service = AiRecordService(ai_client=ai_client)
+
+    result = await service.create_food_from_text(
+        db_session,
+        user_id=user.id,
+        text="刚刚吃了两个烧烤 慢跑了十分钟",
+        today=date(2026, 7, 22),
+    )
+
+    assert result.record.original_text == "刚刚吃了两个烧烤"
+    assert result.record.calories == 200
+    assert result.recorded_exercise is not None
+    assert result.recorded_exercise.duration_minutes == 10
+    assert result.recorded_exercise.calories_burned == 75
+    assert result.daily_summary.food_totals.calories == 200
+    assert result.daily_summary.exercise_totals.calories_burned == 75
+    assert len(result.daily_summary.exercise_records) == 1
+
+    assert len(list(db_session.scalars(select(FoodLog)))) == 1
+    assert len(list(db_session.scalars(select(ExerciseLog)))) == 1
+    messages = list(db_session.scalars(select(ConversationMessage)))
+    assert messages[-1].metadata_json["record_types"] == ["food", "exercise"]
 
 
 @pytest.mark.asyncio
@@ -289,30 +376,38 @@ async def test_exercise_ai_result_rejects_unreasonable_duration_and_writes_no_re
 def _plan_ai_result():
     days = []
     for offset in range(7):
-        day = date(2026, 7, 20).toordinal() + offset
-        day_date = date.fromordinal(day).isoformat()
-        days.append(
+        day_date = date.fromordinal(date(2026, 7, 20).toordinal() + offset).isoformat()
+        meals = [
             {
-                "date": day_date,
-                "calorie_target": 1900 + offset,
-                "meals": [
-                    {
-                        "name": f"AI meal {offset + 1}",
-                        "meal_type": "lunch",
-                        "calories": 600,
-                        "protein_g": 35,
-                        "carb_g": 65,
-                        "fat_g": 18,
-                    }
+                "name": f"AI meal {offset + 1}",
+                "meal_type": meal_type,
+                "calories": 475,
+                "protein_g": 30,
+                "carb_g": 50,
+                "fat_g": 12,
+                "foods": [
+                    {"name": "Food A", "amount": "100g"},
+                    {"name": "Food B", "amount": "150g"},
+                    {"name": "Food C", "amount": "1 serving"},
                 ],
-                "training_instruction": {
-                    "kind": "rest" if offset == 6 else "workout",
-                    "title": "Recovery" if offset == 6 else "AI workout",
-                    "instructions": "Rest and walk" if offset == 6 else "Moderate strength session",
-                    "duration_minutes": None if offset == 6 else 40,
-                },
             }
-        )
+            for meal_type in ["breakfast", "lunch", "snack", "dinner"]
+        ]
+        training = {
+            "kind": "rest" if offset == 6 else "workout",
+            "title": "Recovery" if offset == 6 else "AI workout",
+            "instructions": "Rest and walk" if offset == 6 else "Moderate strength session",
+            "duration_minutes": None if offset == 6 else 40,
+            "split": "Recovery" if offset == 6 else "Upper/lower split",
+            "focus": "Recovery" if offset == 6 else "Technique",
+            "warmup": None if offset == 6 else "Walk for five minutes",
+            "exercises": [] if offset == 6 else [
+                {"name": f"Exercise {number}", "sets": 3, "reps": "8-12", "rest_seconds": 90, "notes": "Controlled form"}
+                for number in range(1, 6)
+            ],
+            "cooldown": "Stretch",
+        }
+        days.append({"date": day_date, "calorie_target": 1900 + offset, "meals": meals, "training_instruction": training})
     return {"title": "AI plan", "days": days, "safety_note": "safe balanced plan"}
 
 
@@ -376,9 +471,10 @@ async def test_openai_compatible_client_rejects_invalid_json_without_network(mon
 
 
 def test_openai_compatible_client_requires_provider_settings(monkeypatch):
-    from app.core.config import get_settings
+    from app.core.config import Settings, get_settings
     from app.services.ai_client import OpenAICompatibleClient
 
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
     monkeypatch.delenv("AI_BASE_URL", raising=False)
     monkeypatch.delenv("AI_API_KEY", raising=False)
     monkeypatch.delenv("AI_MODEL", raising=False)

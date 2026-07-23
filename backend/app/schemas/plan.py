@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+﻿from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, ValidationError, model_validator
@@ -9,6 +9,12 @@ MealType = Literal["breakfast", "lunch", "dinner", "snack"]
 WorkoutKind = Literal["workout", "rest"]
 
 
+class MealFood(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    amount: str = Field(min_length=1, max_length=128)
+    notes: str | None = Field(default=None, max_length=256)
+
+
 class MealPlan(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     meal_type: MealType | None = None
@@ -16,6 +22,16 @@ class MealPlan(BaseModel):
     protein_g: FiniteFloat = Field(ge=0)
     carb_g: FiniteFloat = Field(ge=0)
     fat_g: FiniteFloat = Field(ge=0)
+    # Empty remains valid so plans created before the detailed-food upgrade can still be viewed.
+    foods: list[MealFood] = Field(default_factory=list, max_length=12)
+
+
+class WorkoutExercise(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    sets: int = Field(ge=1, le=8)
+    reps: str = Field(min_length=1, max_length=64)
+    rest_seconds: int = Field(ge=30, le=300)
+    notes: str | None = Field(default=None, max_length=256)
 
 
 class WorkoutPlan(BaseModel):
@@ -23,6 +39,17 @@ class WorkoutPlan(BaseModel):
     title: str = Field(min_length=1, max_length=256)
     instructions: str = Field(min_length=1, max_length=2048)
     duration_minutes: FiniteFloat | None = Field(default=None, gt=0)
+    split: str | None = Field(default=None, max_length=128)
+    focus: str | None = Field(default=None, max_length=256)
+    warmup: str | None = Field(default=None, max_length=512)
+    exercises: list[WorkoutExercise] = Field(default_factory=list, max_length=12)
+    cooldown: str | None = Field(default=None, max_length=512)
+
+    @model_validator(mode="after")
+    def validate_rest_day_has_no_exercises(self) -> "WorkoutPlan":
+        if self.kind == "rest" and self.exercises:
+            raise ValueError("rest days cannot contain strength exercises")
+        return self
 
 
 class PlanDay(BaseModel):

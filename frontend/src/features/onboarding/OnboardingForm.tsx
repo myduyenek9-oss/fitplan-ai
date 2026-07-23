@@ -49,7 +49,7 @@ export function OnboardingForm({ onAuthenticated }: OnboardingFormProps) {
     } catch (nextError) {
       if (isSetup && nextError instanceof ApiError && nextError.status === 409) {
         setMode("login");
-        setError("这个 FitPlan 已经创建过账号了，请直接登录。");
+        setError("这个用户名已注册，请直接登录或换一个用户名。");
       } else {
         setError(readError(nextError));
       }

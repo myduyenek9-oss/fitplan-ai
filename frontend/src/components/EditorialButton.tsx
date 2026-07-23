@@ -2,7 +2,7 @@ import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export type EditorialButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "accent" | "secondary";
+  variant?: "primary" | "accent" | "secondary" | "quick-action" | "dingtalk-action";
   loading?: boolean;
   loadingLabel?: string;
   icon?: ReactNode;

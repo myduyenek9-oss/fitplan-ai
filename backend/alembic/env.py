@@ -8,6 +8,7 @@ from app.db.base import Base
 from app.models.conversation import ConversationMessage  # noqa: F401 - register model metadata for migrations
 from app.models.goal import Goal  # noqa: F401 - register model metadata for migrations
 from app.models.plan import Plan, PlanDay  # noqa: F401 - register model metadata for migrations
+from app.models.notification import DingTalkNotification  # noqa: F401 - register model metadata for migrations
 from app.models.profile import Profile  # noqa: F401 - register model metadata for migrations
 from app.models.record import BodyMetric, ExerciseLog, FoodLog  # noqa: F401 - register model metadata for migrations
 from app.models.user import User  # noqa: F401 - register model metadata for migrations

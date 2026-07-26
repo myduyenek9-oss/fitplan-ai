@@ -16,7 +16,6 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to Alibaba Cloud
-    if: ${{ vars.AUTO_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production

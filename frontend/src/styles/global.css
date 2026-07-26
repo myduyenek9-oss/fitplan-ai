@@ -858,6 +858,13 @@ svg {
   line-height: 0.88;
 }
 
+@media (max-width: 849px) {
+  /* Give the wrapped onboarding slogan more breathing room on phone screens, especially iOS Safari. */
+  .onboarding-page__story-copy h2 {
+    line-height: 1.04;
+  }
+}
+
 .onboarding-page__story-copy > p:last-child {
   max-width: 520px;
   margin: 22px 0 0;

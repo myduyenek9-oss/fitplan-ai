@@ -37,6 +37,28 @@ jobs:
             exit 1
           fi
 
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Build frontend on GitHub runner
+        run: |
+          set -Eeuo pipefail
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend run build
+          tar -czf "$RUNNER_TEMP/fitplan-frontend-${GITHUB_SHA}.tar.gz" -C frontend/dist .
+
       - name: Configure SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -50,6 +72,25 @@ jobs:
           chmod 600 ~/.ssh/fitplan_deploy_key
           ssh-keyscan -T 15 -p "$port" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload prebuilt frontend
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -Eeuo pipefail
+          port="${DEPLOY_PORT:-22}"
+          scp \
+            -i ~/.ssh/fitplan_deploy_key \
+            -P "$port" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=20 \
+            -o TCPKeepAlive=yes \
+            "$RUNNER_TEMP/fitplan-frontend-${GITHUB_SHA}.tar.gz" \
+            "$DEPLOY_USER@$DEPLOY_HOST:/tmp/fitplan-frontend-${GITHUB_SHA}.tar.gz"
 
       - name: Deploy current main branch
         env:
@@ -68,4 +109,4 @@ jobs:
             -o ServerAliveCountMax=20 \
             -o TCPKeepAlive=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            'cd /opt/fitplan-ai && DEPLOY_BRANCH=main bash scripts/deploy-production.sh'
+            "cd /opt/fitplan-ai && PREBUILT_FRONTEND_ARCHIVE='/tmp/fitplan-frontend-${GITHUB_SHA}.tar.gz' FORCE_DEPLOY=1 DEPLOY_BRANCH=main bash scripts/deploy-production.sh"

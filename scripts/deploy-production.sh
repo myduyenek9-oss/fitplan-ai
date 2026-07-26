@@ -11,6 +11,7 @@ ENV_FILE="${ENV_FILE:-${APP_DIR}/infra/.env}"
 GIT_REMOTE="${GIT_REMOTE:-origin}"
 LOCK_FILE="${LOCK_FILE:-/tmp/fitplan-ai-deploy.lock}"
 FORCE_DEPLOY="${FORCE_DEPLOY:-0}"
+COMPOSE_PARALLEL_LIMIT="${COMPOSE_PARALLEL_LIMIT:-1}"
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -70,8 +71,12 @@ fi
 log "Validating Compose configuration..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config --quiet
 
-log "Building and starting FitPlan AI..."
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build --remove-orphans
+log "Building FitPlan AI one service at a time (parallel limit: ${COMPOSE_PARALLEL_LIMIT})..."
+COMPOSE_PARALLEL_LIMIT="${COMPOSE_PARALLEL_LIMIT}" \
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" build
+
+log "Starting FitPlan AI with the newly built images..."
+docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --no-build --remove-orphans
 
 log "Current service status:"
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" ps

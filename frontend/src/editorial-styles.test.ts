@@ -107,6 +107,23 @@ describe("editorial visual system styles", () => {
     }
   });
 
+  it("keeps the iOS bottom navigation low and the system status bar white", () => {
+    const global = readSource("styles/global.css");
+    const index = readSource("../index.html");
+    const manifest = JSON.parse(readSource("../public/manifest.webmanifest")) as {
+      theme_color?: string;
+    };
+
+    expect(global).toContain(
+      "bottom: max(4px, calc(env(safe-area-inset-bottom) - 8px));",
+    );
+    expect(index).toContain('<meta name="theme-color" content="#ffffff" />');
+    expect(index).toContain(
+      '<meta name="apple-mobile-web-app-status-bar-style" content="default" />',
+    );
+    expect(manifest.theme_color).toBe("#ffffff");
+  });
+
   it("imports tokens before global styles and the App", () => {
     const main = readSource("main.tsx");
     const tokensImport = main.indexOf('import "./styles/tokens.css";');

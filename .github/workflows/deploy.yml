@@ -64,5 +64,8 @@ jobs:
             -p "$port" \
             -o BatchMode=yes \
             -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=20 \
+            -o TCPKeepAlive=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
             'cd /opt/fitplan-ai && DEPLOY_BRANCH=main bash scripts/deploy-production.sh'
